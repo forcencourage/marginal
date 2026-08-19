@@ -597,8 +597,74 @@ main.library {
   width: 8px; height: 8px; border-radius: 50%; background: var(--highlight);
 }
 
-/* Mobile drawer trigger for highlights (hidden on desktop) */
+.confirm-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 26px;
+  transform: translate(-50%, 8px);
+  background: var(--ink);
+  color: var(--paper);
+  padding: 10px 10px 10px 18px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  z-index: 11;
+  box-shadow: var(--shadow-card-hover);
+  max-width: min(520px, 88%);
+}
+.confirm-bar.show { opacity: 1; pointer-events: auto; transform: translate(-50%, 0); }
+
+.confirm-text {
+  font-size: 12.5px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.confirm-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.btn-sm {
+  padding: 7px 14px;
+  font-size: 12.5px;
+  border-radius: 999px;
+}
+
+.confirm-bar .btn-ghost {
+  border-color: rgba(250, 249, 246, 0.3);
+  color: var(--paper);
+}
+.confirm-bar .btn-ghost:hover { background: rgba(250, 249, 246, 0.1); }
+
+.confirm-bar .btn:not(.btn-ghost) {
+  background: var(--highlight);
+  border-color: var(--highlight);
+  color: var(--ink);
+}
+.confirm-bar .btn:not(.btn-ghost):hover { background: var(--highlight-strong); }
+
+/* Mobile drawer trigger + scrim for highlights (hidden on desktop) */
 .panel-toggle { display: none; }
+
+.panel-scrim {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 39;
+}
+.panel-scrim.open { display: block; }
 
 /* ============================================================================
    Responsive
@@ -621,15 +687,6 @@ main.library {
     box-shadow: 24px 0 48px rgba(0,0,0,0.35);
   }
   .highlights-panel.open { transform: translateX(0); }
-
-  .panel-scrim {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.4);
-    z-index: 39;
-  }
-  .panel-scrim.open { display: block; }
 
   .panel-toggle {
     display: flex;

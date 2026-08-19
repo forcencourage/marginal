@@ -21,6 +21,11 @@ const loadingEl = document.getElementById('reader-loading');
 const deleteBtn = document.getElementById('delete-book');
 const toast = document.getElementById('selection-toast');
 
+const confirmBar = document.getElementById('confirm-bar');
+const confirmText = document.getElementById('confirm-text');
+const confirmSaveBtn = document.getElementById('confirm-save');
+const confirmCancelBtn = document.getElementById('confirm-cancel');
+
 const highlightList = document.getElementById('highlight-list');
 const highlightEmpty = document.getElementById('highlight-empty');
 const highlightCount = document.getElementById('highlight-count');
@@ -36,6 +41,7 @@ let book = null;
 let rendition = null;
 let locationsReady = false;
 let saveProgressTimer = null;
+let pendingSelection = null; // { cfiRange, contents, text } awaiting user confirmation
 
 if (!bookId) {
   window.location.href = 'index.html';
@@ -89,6 +95,9 @@ function bindHeaderControls() {
     panelScrim.classList.add('open');
   });
   panelScrim.addEventListener('click', closePanel);
+
+  confirmSaveBtn.addEventListener('click', confirmPendingHighlight);
+  confirmCancelBtn.addEventListener('click', cancelPendingHighlight);
 }
 
 function closePanel() {
@@ -173,30 +182,60 @@ function scheduleProgressSave(location) {
 }
 
 // ---------------------------------------------------------------------------
-// Highlight capture (selection -> save -> render in book)
+// Highlight capture (selection -> confirm -> save -> render in book)
 // ---------------------------------------------------------------------------
 
 async function onTextSelected(cfiRange, contents) {
   let text = '';
   try {
-    text = book.getRange(cfiRange).toString().trim();
+    // book.getRange() is asynchronous in epub.js — it resolves to a Range,
+    // so it must be awaited before calling .toString() on it.
+    const range = await book.getRange(cfiRange);
+    text = range.toString().trim();
   } catch (err) {
     console.error(err);
   }
   if (!text) return;
+
+  pendingSelection = { cfiRange, contents, text };
+  showConfirmBar(text);
+}
+
+function showConfirmBar(text) {
+  confirmText.textContent = text.length > 140 ? `${text.slice(0, 140)}…` : text;
+  confirmBar.classList.add('show');
+}
+
+function hideConfirmBar() {
+  confirmBar.classList.remove('show');
+}
+
+async function confirmPendingHighlight() {
+  if (!pendingSelection) return;
+  const { cfiRange, contents, text } = pendingSelection;
+  pendingSelection = null;
+  hideConfirmBar();
 
   paintHighlight(cfiRange);
   clearSelection(contents);
 
   try {
     const row = await insertHighlight({ bookId, cfiRange, textSnippet: text });
-    addHighlightCard(row, { prepend: false });
+    addHighlightCard(row);
     updateHighlightCount();
     showToast();
   } catch (err) {
     console.error('Could not save highlight', err);
     rendition.annotations.remove(cfiRange, 'highlight');
+    alert('Could not save the highlight. See console for details.');
   }
+}
+
+function cancelPendingHighlight() {
+  if (!pendingSelection) return;
+  clearSelection(pendingSelection.contents);
+  pendingSelection = null;
+  hideConfirmBar();
 }
 
 function clearSelection(contents) {
