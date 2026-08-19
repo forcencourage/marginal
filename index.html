@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Marginal — Library</title>
+<meta name="description" content="A minimal, private EPUB library and reader." />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,450;9..144,500;9..144,600&family=Inter:wght@400;500;560;650&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<header class="library-header">
+  <div class="brand">
+    <span class="brand-mark">Marginal</span>
+    <span class="brand-tag">Your library</span>
+  </div>
+  <button class="btn" id="import-trigger" type="button">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+    Import EPUB
+  </button>
+</header>
+
+<main class="library">
+  <div id="grid" class="book-grid"></div>
+  <div id="empty-state" class="library-empty" hidden>
+    <h2>Nothing on the shelf yet</h2>
+    <p>Import an EPUB to start reading and collecting highlights.</p>
+  </div>
+</main>
+
+<!-- Import overlay -->
+<div class="overlay" id="import-overlay">
+  <div class="overlay-card">
+    <h3>Import a book</h3>
+    <p>Choose an .epub file. It's uploaded to your Supabase project — nothing leaves that.</p>
+
+    <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Choose an EPUB file">
+      <strong>Click to choose</strong> or drop an .epub file here
+      <input type="file" accept=".epub,application/epub+zip" id="file-input" class="visually-hidden" />
+    </div>
+
+    <div class="import-status" id="import-status">
+      <span class="spinner"></span>
+      <span id="import-status-text">Reading file…</span>
+    </div>
+
+    <div class="overlay-actions">
+      <button class="btn btn-ghost" id="import-cancel" type="button">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
