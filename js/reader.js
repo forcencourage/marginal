@@ -6,6 +6,7 @@ import {
   insertHighlight,
   deleteHighlight,
   updateBookProgress,
+  flushBookProgress,
 } from './supabaseClient.js';
 
 const HIGHLIGHT_FILL = '#a9dcf5';
@@ -42,6 +43,8 @@ let rendition = null;
 let locationsReady = false;
 let saveProgressTimer = null;
 let pendingSelection = null; // { cfiRange, contents, text } awaiting user confirmation
+let latestCfi = null;
+let latestPercent = 0;
 
 if (!bookId) {
   window.location.href = 'index.html';
@@ -98,6 +101,23 @@ function bindHeaderControls() {
 
   confirmSaveBtn.addEventListener('click', confirmPendingHighlight);
   confirmCancelBtn.addEventListener('click', cancelPendingHighlight);
+
+  // The debounced save (see scheduleProgressSave) can miss the very last
+  // position if the reader navigates away before it fires. Flush
+  // immediately — with keepalive so it survives the navigation — on every
+  // path that leaves the reader.
+  document.getElementById('back-link').addEventListener('click', () => flushProgress());
+  window.addEventListener('pagehide', () => flushProgress());
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushProgress();
+  });
+}
+
+function flushProgress() {
+  clearTimeout(saveProgressTimer);
+  if (latestCfi) {
+    flushBookProgress(bookId, { locationCfi: latestCfi, progressPercent: latestPercent });
+  }
 }
 
 function closePanel() {
@@ -168,6 +188,12 @@ function scheduleProgressSave(location) {
     percent = Math.round(book.locations.percentageFromCfi(cfi) * 100);
   }
   progressPill.textContent = percent > 0 ? `${percent}% read` : 'Just started';
+
+  // Track the latest position outside the debounce so it's always available
+  // for an immediate flush (see flushProgress) if the reader navigates away
+  // before the debounced save below gets a chance to fire.
+  latestCfi = cfi;
+  latestPercent = percent;
 
   clearTimeout(saveProgressTimer);
   saveProgressTimer = setTimeout(async () => {
@@ -272,13 +298,10 @@ function renderHighlightList(rows) {
     addHighlightCard(row);
     paintHighlight(row.cfi_range);
   }
-
-  // The scrolled-doc manager lazily mounts sections as the reader scrolls,
-  // so re-paint whenever a new section is rendered in case it contains one
-  // of these highlights.
-  rendition.on('rendered', () => {
-    rows.forEach((row) => paintHighlight(row.cfi_range));
-  });
+  // epub.js re-attaches known annotations to each section automatically as
+  // it's (re)rendered while scrolling — no need to re-add them ourselves.
+  // Doing so on every 'rendered' event stacked duplicate highlight overlays
+  // on top of each other and eventually obscured the underlying text.
 }
 
 function addHighlightCard(row) {

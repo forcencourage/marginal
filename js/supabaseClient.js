@@ -46,6 +46,31 @@ export async function updateBookProgress(id, { locationCfi, progressPercent }) {
   if (error) throw error;
 }
 
+// Fires a raw REST request with `keepalive: true` so it's still delivered
+// even if the page is navigating away or closing right now — a normal
+// supabase-js call (or any debounced fetch without keepalive) can get
+// cancelled mid-flight in that situation, which is how "resume where I
+// left off" silently loses the very last position.
+export function flushBookProgress(id, { locationCfi, progressPercent }) {
+  if (!locationCfi) return;
+  try {
+    fetch(`${SUPABASE_URL}/rest/v1/books?id=eq.${id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify({ location_cfi: locationCfi, progress_percent: progressPercent }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {
+    // keepalive fetch can throw synchronously if the payload exceeds the
+    // browser's queued-request budget — safe to ignore, it's a best effort.
+  }
+}
+
 export async function deleteBook(book) {
   const paths = [book.file_path];
   if (book.cover_path) paths.push(book.cover_path);
