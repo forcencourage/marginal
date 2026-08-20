@@ -362,7 +362,14 @@ async function goToHighlight(cfiRange, card) {
     // containing paragraph — which is why navigation lands "near" the
     // highlight instead of on it. Collapsing to the start point first gets
     // an exact section/offset match.
-    const startCfi = new ePub.CFI(cfiRange).collapse(true).toString();
+    //
+    // Note: EpubCFI#collapse() mutates the instance in place and returns
+    // undefined — it does NOT return `this` — so it can't be chained with
+    // .toString(). Call them as separate statements.
+    const cfiObj = new ePub.CFI(cfiRange);
+    cfiObj.collapse(true);
+    const startCfi = cfiObj.toString();
+
     await rendition.display(startCfi);
   } catch (err) {
     console.error(err);
