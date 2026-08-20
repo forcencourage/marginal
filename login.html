@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Marginal — Sign in</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,450;9..144,500;9..144,600&family=Inter:wght@400;500;560;650&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<main class="login-screen">
+  <form class="login-card" id="login-form">
+    <span class="brand-mark">Marginal</span>
+    <p class="login-tag">Sign in to your library</p>
+
+    <label class="login-field">
+      <span>Email</span>
+      <input type="email" id="login-email" autocomplete="username" required />
+    </label>
+    <label class="login-field">
+      <span>Password</span>
+      <input type="password" id="login-password" autocomplete="current-password" required />
+    </label>
+
+    <p class="login-error" id="login-error" hidden></p>
+
+    <button class="btn" type="submit" id="login-submit">Sign in</button>
+  </form>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script type="module" src="js/login.js"></script>
+</body>
+</html>

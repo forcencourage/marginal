@@ -6,6 +6,7 @@ import {
   uploadCoverBlob,
   publicCoverUrl,
 } from './supabaseClient.js';
+import { requireAuth, signOut } from './auth.js';
 
 const grid = document.getElementById('grid');
 const emptyState = document.getElementById('empty-state');
@@ -24,7 +25,13 @@ const TRASH_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 init();
 
 async function init() {
+  const session = await requireAuth();
+  if (!session) return; // requireAuth already redirected to login.html
+
   await renderGrid();
+
+  document.getElementById('logout-btn').addEventListener('click', signOut);
+
 
   importTrigger.addEventListener('click', openOverlay);
   importCancel.addEventListener('click', closeOverlay);

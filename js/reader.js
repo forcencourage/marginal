@@ -8,6 +8,7 @@ import {
   updateBookProgress,
   flushBookProgress,
 } from './supabaseClient.js';
+import { requireAuth } from './auth.js';
 
 const HIGHLIGHT_FILL = '#a9dcf5';
 const HIGHLIGHT_FILL_STRONG = '#7cc6ec';
@@ -53,6 +54,10 @@ if (!bookId) {
 }
 
 async function init() {
+
+  const session = await requireAuth();
+  if (!session) return;
+
   try {
     bookRow = await fetchBook(bookId);
   } catch (err) {
