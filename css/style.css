@@ -437,10 +437,30 @@ main.library {
   white-space: nowrap;
 }
 
+/* Locks the whole reader to the viewport: header stays put, and only the
+   book pane / highlights list scroll internally — never the page itself. */
+body.reader-page {
+  height: 100vh;
+  height: 100dvh; /* accounts for mobile browser chrome showing/hiding */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+body.reader-page .reader-header {
+  flex: none; /* header keeps its natural height, never shrinks */
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
 .reader-layout {
   display: grid;
   grid-template-columns: 1fr 2fr;
-  height: calc(100vh - 61px);
+  flex: 1;
+  min-height: 0; /* without this, grid children ignore the flex parent's
+                    height and fall back to their content size, which is
+                    exactly what caused the page-level scroll */
 }
 
 /* --- Highlights panel (left third) --- */
