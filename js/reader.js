@@ -357,15 +357,66 @@ function addHighlightCard(row) {
 async function goToHighlight(cfiRange, card) {
   if (window.innerWidth <= 860) closePanel();
   try {
-    await rendition.display(cfiRange);
+    // display() expects a point CFI. Handed a range CFI (start..end), it
+    // resolves to the range's common ancestor — often the top of the
+    // containing paragraph — which is why navigation lands "near" the
+    // highlight instead of on it. Collapsing to the start point first gets
+    // an exact section/offset match.
+    const startCfi = new ePub.CFI(cfiRange).collapse(true).toString();
+    await rendition.display(startCfi);
   } catch (err) {
     console.error(err);
     return;
   }
+
+  // display() only guarantees the right section is rendered — in the
+  // continuous/scrolled-doc manager it doesn't reliably center the exact
+  // highlighted text within #viewer. Nudge the scroll position using the
+  // highlight's own DOM element once it's painted.
+  await waitForNextPaint();
+  scrollHighlightIntoView(cfiRange);
+
   flashInBook(cfiRange);
   document.querySelectorAll('.highlight-card.flash').forEach((el) => el.classList.remove('flash'));
   card.classList.add('flash');
   setTimeout(() => card.classList.remove('flash'), 1200);
+}
+
+function waitForNextPaint() {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  });
+}
+
+// Fine-tunes scroll position after display() so the highlighted mark is
+// actually centered in the reading pane, not just "somewhere in view".
+function scrollHighlightIntoView(cfiRange) {
+  try {
+    const viewer = document.getElementById('viewer');
+    for (const contents of rendition.getContents()) {
+      const el = contents.document.querySelector(`[data-epubjs-cfi="${cssEscape(cfiRange)}"]`);
+      if (!el) continue;
+
+      // el's getBoundingClientRect() is relative to the iframe's own
+      // viewport, not the outer page — add the iframe's own position
+      // (contents.window.frameElement) to get true coordinates in #viewer.
+      const frameEl = contents.window.frameElement;
+      if (!frameEl) continue;
+
+      const frameRect = frameEl.getBoundingClientRect();
+      const elRect = el.getBoundingClientRect();
+      const viewerRect = viewer.getBoundingClientRect();
+
+      const absoluteElTop = frameRect.top + elRect.top;
+      const offset = absoluteElTop - viewerRect.top - (viewerRect.height / 2 - elRect.height / 2);
+
+      viewer.scrollTop += offset;
+      break;
+    }
+  } catch {
+    // Best-effort fine-tuning only — display() above already gets us close,
+    // so a failure here just means slightly imprecise centering.
+  }
 }
 
 // Best-effort brighten-then-restore pulse on the highlighted text itself.
