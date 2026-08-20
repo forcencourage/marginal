@@ -472,6 +472,10 @@ body.reader-page .reader-header {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0; /* grid items default to min-height: auto, which lets this
+                    panel grow to fit all highlight cards instead of
+                    clipping to the row's height — breaking the internal
+                    scroll on .highlight-list below */
 }
 
 .panel-heading {
@@ -571,6 +575,9 @@ body.reader-page .reader-header {
   position: relative;
   background: var(--paper);
   min-width: 0;
+  min-height: 0; /* same fix — keeps this grid item pinned to the row's
+                    height so #viewer's absolute positioning has a stable
+                    box to fill */
 }
 
 #viewer {
