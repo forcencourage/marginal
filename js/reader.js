@@ -18,7 +18,7 @@ const bookId = params.get('id');
 
 const titleEl = document.getElementById('book-title');
 const authorEl = document.getElementById('book-author');
-const progressPill = document.getElementById('progress-pill');
+// const progressPill = document.getElementById('progress-pill');
 const loadingEl = document.getElementById('reader-loading');
 const deleteBtn = document.getElementById('delete-book');
 const toast = document.getElementById('selection-toast');
@@ -192,7 +192,7 @@ function scheduleProgressSave(location) {
   if (locationsReady && book.locations.length()) {
     percent = Math.round(book.locations.percentageFromCfi(cfi) * 100);
   }
-  progressPill.textContent = percent > 0 ? `${percent}% read` : 'Just started';
+  // progressPill.textContent = percent > 0 ? `${percent}% read` : 'Just started';
 
   // Track the latest position outside the debounce so it's always available
   // for an immediate flush (see flushProgress) if the reader navigates away
