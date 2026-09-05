@@ -77,6 +77,16 @@ async function init() {
   // highlights into the page once the rendition actually exists.
   const [, rows] = await Promise.all([openBook(), fetchHighlights(bookId).catch((err) => { console.error(err); return []; })]);
   renderHighlightList(rows);
+
+  const hlParam = params.get('hl');
+  if (hlParam) {
+    const row = rows.find(r => String(r.id) === hlParam);
+    const card = highlightList.querySelector(`.highlight-card[data-id="${hlParam}"]`);
+    if (row && card) {
+      await waitForNextPaint();
+      goToHighlight(row.cfi_range, card);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
