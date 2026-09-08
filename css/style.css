@@ -582,6 +582,7 @@ body.reader-page .reader-header {
 
 #viewer {
   position: absolute;
+  overflow-anchor: none;
   inset: 0;
 }
 
