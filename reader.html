@@ -28,9 +28,8 @@
     </div>
   </div>
   <div class="right">
-    <!-- <span class="progress-pill" id="progress-pill">—</span> -->
-    <button class="icon-btn" id="delete-book" aria-label="Delete this book" type="button">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+    <button class="icon-btn" id="toc-toggle" aria-label="Table of contents" aria-haspopup="true" aria-expanded="false" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/></svg>
     </button>
   </div>
 </header>
@@ -48,6 +47,23 @@
         Select any text in the book to save it here — it's highlighted in the
         page and stored to your library instantly.
       </p>
+    </div>
+  </aside>
+
+  <div class="panel-scrim" id="toc-scrim"></div>
+
+  <aside class="toc-panel" id="toc-panel">
+    <div class="panel-heading">
+      <h2>Contents</h2>
+      <button class="icon-btn panel-close" id="toc-close" aria-label="Close table of contents" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
+    <nav class="toc-list" id="toc-list" aria-label="Table of contents">
+      <p class="toc-empty" id="toc-empty">Loading contents…</p>
+    </nav>
+    <div class="toc-footer">
+      <button class="btn-text btn-danger-text" id="delete-book" type="button">Delete this book</button>
     </div>
   </aside>
 

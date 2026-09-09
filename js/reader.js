@@ -36,6 +36,13 @@ const panel = document.getElementById('highlights-panel');
 const panelToggle = document.getElementById('panel-toggle');
 const panelScrim = document.getElementById('panel-scrim');
 
+const tocToggle = document.getElementById('toc-toggle');
+const tocClose = document.getElementById('toc-close');
+const tocScrim = document.getElementById('toc-scrim');
+const tocPanel = document.getElementById('toc-panel');
+const tocList = document.getElementById('toc-list');
+const tocEmpty = document.getElementById('toc-empty');
+
 const REMOVE_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`;
 
 let bookRow = null;
@@ -109,10 +116,18 @@ function bindHeaderControls() {
   });
 
   panelToggle.addEventListener('click', () => {
+    closeTocPanel();
     panel.classList.add('open');
     panelScrim.classList.add('open');
   });
   panelScrim.addEventListener('click', closePanel);
+
+  tocToggle.addEventListener('click', () => {
+    closePanel();
+    openTocPanel();
+  });
+  tocClose.addEventListener('click', closeTocPanel);
+  tocScrim.addEventListener('click', closeTocPanel);
 
   confirmSaveBtn.addEventListener('click', confirmPendingHighlight);
   confirmCancelBtn.addEventListener('click', cancelPendingHighlight);
@@ -140,6 +155,18 @@ function flushProgress() {
 function closePanel() {
   panel.classList.remove('open');
   panelScrim.classList.remove('open');
+}
+
+function openTocPanel() {
+  tocPanel.classList.add('open');
+  tocScrim.classList.add('open');
+  tocToggle.setAttribute('aria-expanded', 'true');
+}
+
+function closeTocPanel() {
+  tocPanel.classList.remove('open');
+  tocScrim.classList.remove('open');
+  tocToggle.setAttribute('aria-expanded', 'false');
 }
 
 // ---------------------------------------------------------------------------
@@ -198,6 +225,13 @@ async function openBook() {
     await rendition.display();
   }
 
+  book.loaded.navigation
+  .then((nav) => renderToc(nav.toc))
+  .catch((err) => {
+    console.error('Could not load table of contents', err);
+    tocEmpty.textContent = 'Contents unavailable for this book.';
+  });
+
   // Generate locations in the background so percentage-through-book works.
   // Not required for the reader to function, so failures are non-fatal.
   book.locations.generate(1600).then(() => { locationsReady = true; }).catch(() => {});
@@ -206,6 +240,8 @@ async function openBook() {
 function scheduleProgressSave(location) {
   const cfi = location?.start?.cfi;
   if (!cfi) return;
+
+  updateActiveTocLink(location?.start?.href);
 
   let percent = bookRow.progress_percent || 0;
   if (locationsReady && book.locations.length()) {
@@ -457,4 +493,51 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str ?? '';
   return div.innerHTML;
+}
+
+// ---------------------------------------------------------------------------
+// Table of contents
+// ---------------------------------------------------------------------------
+
+function renderToc(toc) {
+  if (!toc || !toc.length) {
+    tocEmpty.textContent = 'No table of contents in this book.';
+    return;
+  }
+  tocEmpty.style.display = 'none';
+  tocList.appendChild(buildTocLevel(toc, false));
+}
+
+function buildTocLevel(items, isSub) {
+  const frag = document.createDocumentFragment();
+  for (const item of items) {
+    const link = document.createElement('button');
+    link.type = 'button';
+    link.className = isSub ? 'toc-link sub' : 'toc-link';
+    link.textContent = item.label.trim();
+    link.dataset.href = item.href;
+    link.addEventListener('click', async () => {
+      try {
+        await rendition.display(item.href);
+      } catch (err) {
+        console.error(err);
+        return;
+      }
+      closeTocPanel();
+    });
+    frag.appendChild(link);
+    if (item.subitems && item.subitems.length) {
+      frag.appendChild(buildTocLevel(item.subitems, true));
+    }
+  }
+  return frag;
+}
+
+function updateActiveTocLink(href) {
+  if (!href) return;
+  const base = href.split('#')[0];
+  tocList.querySelectorAll('.toc-link').forEach((el) => {
+    const elBase = (el.dataset.href || '').split('#')[0];
+    el.classList.toggle('active', elBase === base);
+  });
 }
