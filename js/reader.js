@@ -158,16 +158,6 @@ async function openBook() {
     spread: 'none',
   });
 
-  rendition.on('relocated', (loc) => {
-  console.log('[relocated]', performance.now().toFixed(0), loc?.start?.cfi);
-});
-document.getElementById('viewer').addEventListener('scroll', () => {
-  console.log('[scroll]', performance.now().toFixed(0), document.getElementById('viewer').scrollTop);
-});
-window.addEventListener('resize', () => {
-  console.log('[resize]', performance.now().toFixed(0), window.innerWidth, window.innerHeight);
-});
-
   rendition.themes.default({
     body: {
       'font-family': "Georgia, 'Iowan Old Style', serif !important",
@@ -188,6 +178,8 @@ window.addEventListener('resize', () => {
 
   rendition.on('relocated', (location) => {
     scheduleProgressSave(location);
+        console.log('[relocated]', performance.now().toFixed(0), location?.start?.cfi); // keep this if you still have it
+
   });
 
   rendition.on('selected', onTextSelected);
@@ -199,6 +191,13 @@ window.addEventListener('resize', () => {
   } else {
     await rendition.display();
   }
+
+    // --- ADD THIS BLOCK HERE, after display() has run ---
+  document.addEventListener('scroll', (e) => {
+    console.log('[scroll]', performance.now().toFixed(0), e.target, e.target.scrollTop ?? window.scrollY);
+  }, true);
+  console.log('manager container:', rendition.manager?.container);
+  // --- END ADDED BLOCK ---
 
   // Generate locations in the background so percentage-through-book works.
   // Not required for the reader to function, so failures are non-fatal.
