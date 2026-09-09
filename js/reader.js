@@ -176,6 +176,7 @@ window.addEventListener('resize', () => {
       padding: '6% 9% !important',
       'max-width': '640px',
       margin: '0 auto !important',
+      'min-height': '100vh !important'
     },
     '::selection': { background: 'rgba(169, 220, 245, 0.7)' },
     '.epubjs-hl': { 'mix-blend-mode': 'multiply', cursor: 'pointer' },
