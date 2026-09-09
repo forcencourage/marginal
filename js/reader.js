@@ -158,6 +158,16 @@ async function openBook() {
     spread: 'none',
   });
 
+  rendition.on('relocated', (loc) => {
+  console.log('[relocated]', performance.now().toFixed(0), loc?.start?.cfi);
+});
+document.getElementById('viewer').addEventListener('scroll', () => {
+  console.log('[scroll]', performance.now().toFixed(0), document.getElementById('viewer').scrollTop);
+});
+window.addEventListener('resize', () => {
+  console.log('[resize]', performance.now().toFixed(0), window.innerWidth, window.innerHeight);
+});
+
   rendition.themes.default({
     body: {
       'font-family': "Georgia, 'Iowan Old Style', serif !important",
