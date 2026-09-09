@@ -140,6 +140,27 @@ function closePanel() {
   panelScrim.classList.remove('open');
 }
 
+const scrollTopDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop');
+const nativeScrollTopGetter = scrollTopDescriptor.get;
+const nativeScrollTopSetter = scrollTopDescriptor.set;
+
+function patchScrollTopSettling(container) {
+  let pendingScrollTop = null;
+  Object.defineProperty(container, 'scrollTop', {
+    set(v) {
+      pendingScrollTop = v;
+      clearTimeout(container._scrollSettleTimer);
+      container._scrollSettleTimer = setTimeout(() => {
+        nativeScrollTopSetter.call(container, pendingScrollTop);
+      }, 30);
+    },
+    get() {
+      return nativeScrollTopGetter.call(container);
+    },
+    configurable: true,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // EPUB rendering
 // ---------------------------------------------------------------------------
@@ -168,6 +189,10 @@ async function openBook() {
       margin: '0 auto !important',
       'min-height': '100vh !important'
     },
+    img: {
+      'max-width': '100% !important',
+      'height': 'auto !important',
+    },  
     '::selection': { background: 'rgba(169, 220, 245, 0.7)' },
     '.epubjs-hl': { 'mix-blend-mode': 'multiply', cursor: 'pointer' },
   });
@@ -178,8 +203,6 @@ async function openBook() {
 
   rendition.on('relocated', (location) => {
     scheduleProgressSave(location);
-        console.log('[relocated]', performance.now().toFixed(0), location?.start?.cfi); // keep this if you still have it
-
   });
 
   rendition.on('selected', onTextSelected);
@@ -192,12 +215,9 @@ async function openBook() {
     await rendition.display();
   }
 
-    // --- ADD THIS BLOCK HERE, after display() has run ---
-  document.addEventListener('scroll', (e) => {
-    console.log('[scroll]', performance.now().toFixed(0), e.target, e.target.scrollTop ?? window.scrollY);
-  }, true);
-  console.log('manager container:', rendition.manager?.container);
-  // --- END ADDED BLOCK ---
+  if (rendition.manager?.container) {
+    patchScrollTopSettling(rendition.manager.container);
+  }
 
   // Generate locations in the background so percentage-through-book works.
   // Not required for the reader to function, so failures are non-fatal.
