@@ -153,6 +153,9 @@ async function openBook() {
 
   book = ePub(arrayBuffer);
 
+  const viewerEl = document.getElementById('viewer');
+console.log('viewer size at render time:', viewerEl.clientWidth, viewerEl.clientHeight);
+
   rendition = book.renderTo('viewer', {
     width: '100%',
     height: '100%',
