@@ -581,8 +581,11 @@ body.reader-page .reader-header {
 }
 
 #viewer {
-  position: absolute;
-  inset: 0;
+  padding: 6% 9%;
+  box-sizing: border-box;
+  /* Ensure width/height are still handled correctly */
+  width: 100%;
+  height: 100%;
 }
 
 .reader-loading {

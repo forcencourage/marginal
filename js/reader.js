@@ -165,7 +165,6 @@ async function openBook() {
       'font-family': "Georgia, 'Iowan Old Style', serif !important",
       'line-height': '1.65 !important',
       color: '#131315 !important',
-      padding: '6% 9% !important',
     },
     '::selection': { background: 'rgba(169, 220, 245, 0.7)' },
     '.epubjs-hl': { 'mix-blend-mode': 'multiply', cursor: 'pointer' },
