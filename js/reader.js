@@ -117,6 +117,8 @@ function bindHeaderControls() {
   confirmSaveBtn.addEventListener('click', confirmPendingHighlight);
   confirmCancelBtn.addEventListener('click', cancelPendingHighlight);
 
+  bindReaderNavigation();
+
   // The debounced save (see scheduleProgressSave) can miss the very last
   // position if the reader navigates away before it fires. Flush
   // immediately — with keepalive so it survives the navigation — on every
@@ -140,27 +142,6 @@ function closePanel() {
   panelScrim.classList.remove('open');
 }
 
-const scrollTopDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop');
-const nativeScrollTopGetter = scrollTopDescriptor.get;
-const nativeScrollTopSetter = scrollTopDescriptor.set;
-
-function patchScrollTopSettling(container) {
-  let pendingScrollTop = null;
-  Object.defineProperty(container, 'scrollTop', {
-    set(v) {
-      pendingScrollTop = v;
-      clearTimeout(container._scrollSettleTimer);
-      container._scrollSettleTimer = setTimeout(() => {
-        nativeScrollTopSetter.call(container, pendingScrollTop);
-      }, 30);
-    },
-    get() {
-      return nativeScrollTopGetter.call(container);
-    },
-    configurable: true,
-  });
-}
-
 // ---------------------------------------------------------------------------
 // EPUB rendering
 // ---------------------------------------------------------------------------
@@ -171,11 +152,11 @@ async function openBook() {
   const arrayBuffer = await res.arrayBuffer();
 
   book = ePub(arrayBuffer);
+
   rendition = book.renderTo('viewer', {
     width: '100%',
     height: '100%',
-    flow: 'scrolled',
-    manager: 'continuous',
+    flow: 'paginated',
     spread: 'none',
   });
 
@@ -187,12 +168,7 @@ async function openBook() {
       padding: '6% 9% !important',
       'max-width': '640px',
       margin: '0 auto !important',
-      'min-height': '100vh !important'
     },
-    img: {
-      'max-width': '100% !important',
-      'height': 'auto !important',
-    },  
     '::selection': { background: 'rgba(169, 220, 245, 0.7)' },
     '.epubjs-hl': { 'mix-blend-mode': 'multiply', cursor: 'pointer' },
   });
@@ -207,16 +183,22 @@ async function openBook() {
 
   rendition.on('selected', onTextSelected);
 
+  rendition.on('click', (event, contents) => {
+    const hasSelection = contents.window.getSelection?.().toString().trim();
+    if (hasSelection) return;
+
+    const width = contents.window.innerWidth;
+    const x = event.clientX;
+    if (x < width * 0.3) rendition.prev();
+    else if (x > width * 0.7) rendition.next();
+  });
+
   await book.ready;
 
   if (bookRow.location_cfi) {
     await rendition.display(bookRow.location_cfi);
   } else {
     await rendition.display();
-  }
-
-  if (rendition.manager?.container) {
-    patchScrollTopSettling(rendition.manager.container);
   }
 
   // Generate locations in the background so percentage-through-book works.
@@ -397,32 +379,16 @@ function addHighlightCard(row) {
 async function goToHighlight(cfiRange, card) {
   if (window.innerWidth <= 860) closePanel();
   try {
-    // display() expects a point CFI. Handed a range CFI (start..end), it
-    // resolves to the range's common ancestor — often the top of the
-    // containing paragraph — which is why navigation lands "near" the
-    // highlight instead of on it. Collapsing to the start point first gets
-    // an exact section/offset match.
-    //
-    // Note: EpubCFI#collapse() mutates the instance in place and returns
-    // undefined — it does NOT return `this` — so it can't be chained with
-    // .toString(). Call them as separate statements.
     const cfiObj = new ePub.CFI(cfiRange);
     cfiObj.collapse(true);
     const startCfi = cfiObj.toString();
-
     await rendition.display(startCfi);
   } catch (err) {
     console.error(err);
     return;
   }
 
-  // display() only guarantees the right section is rendered — in the
-  // continuous/scrolled-doc manager it doesn't reliably center the exact
-  // highlighted text within #viewer. Nudge the scroll position using the
-  // highlight's own DOM element once it's painted.
   await waitForNextPaint();
-  scrollHighlightIntoView(cfiRange);
-
   flashInBook(cfiRange);
   document.querySelectorAll('.highlight-card.flash').forEach((el) => el.classList.remove('flash'));
   card.classList.add('flash');
@@ -435,35 +401,29 @@ function waitForNextPaint() {
   });
 }
 
-// Fine-tunes scroll position after display() so the highlighted mark is
-// actually centered in the reading pane, not just "somewhere in view".
-function scrollHighlightIntoView(cfiRange) {
-  try {
-    const viewer = document.getElementById('viewer');
-    for (const contents of rendition.getContents()) {
-      const el = contents.document.querySelector(`[data-epubjs-cfi="${cssEscape(cfiRange)}"]`);
-      if (!el) continue;
+function bindReaderNavigation() {
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight') rendition.next();
+    if (e.key === 'ArrowLeft') rendition.prev();
+  });
 
-      // el's getBoundingClientRect() is relative to the iframe's own
-      // viewport, not the outer page — add the iframe's own position
-      // (contents.window.frameElement) to get true coordinates in #viewer.
-      const frameEl = contents.window.frameElement;
-      if (!frameEl) continue;
+  const viewerEl = document.getElementById('viewer');
+  viewerEl.addEventListener('click', (e) => {
+    const { left, width } = viewerEl.getBoundingClientRect();
+    const x = e.clientX - left;
+    if (x < width * 0.3) rendition.prev();
+    else if (x > width * 0.7) rendition.next();
+  });
 
-      const frameRect = frameEl.getBoundingClientRect();
-      const elRect = el.getBoundingClientRect();
-      const viewerRect = viewer.getBoundingClientRect();
-
-      const absoluteElTop = frameRect.top + elRect.top;
-      const offset = absoluteElTop - viewerRect.top - (viewerRect.height / 2 - elRect.height / 2);
-
-      viewer.scrollTop += offset;
-      break;
-    }
-  } catch {
-    // Best-effort fine-tuning only — display() above already gets us close,
-    // so a failure here just means slightly imprecise centering.
-  }
+  // Swipe support for touch devices
+  let touchStartX = null;
+  viewerEl.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; });
+  viewerEl.addEventListener('touchend', (e) => {
+    if (touchStartX === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) > 50) dx > 0 ? rendition.prev() : rendition.next();
+    touchStartX = null;
+  });
 }
 
 // Best-effort brighten-then-restore pulse on the highlighted text itself.
