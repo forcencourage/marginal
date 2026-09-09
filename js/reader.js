@@ -153,9 +153,6 @@ async function openBook() {
 
   book = ePub(arrayBuffer);
 
-  const viewerEl = document.getElementById('viewer');
-console.log('viewer size at render time:', viewerEl.clientWidth, viewerEl.clientHeight);
-
   rendition = book.renderTo('viewer', {
     width: '100%',
     height: '100%',
@@ -169,8 +166,6 @@ console.log('viewer size at render time:', viewerEl.clientWidth, viewerEl.client
       'line-height': '1.65 !important',
       color: '#131315 !important',
       padding: '6% 9% !important',
-      'max-width': '640px',
-      margin: '0 auto !important',
     },
     '::selection': { background: 'rgba(169, 220, 245, 0.7)' },
     '.epubjs-hl': { 'mix-blend-mode': 'multiply', cursor: 'pointer' },
