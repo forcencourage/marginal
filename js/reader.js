@@ -170,6 +170,36 @@ function closeTocPanel() {
 }
 
 // ---------------------------------------------------------------------------
+// Navigation (guarded against overlapping calls)
+// ---------------------------------------------------------------------------
+
+let isNavigating = false;
+
+async function goNext() {
+  if (isNavigating) return;
+  isNavigating = true;
+  try {
+    await rendition.next();
+  } catch (err) {
+    console.error(err);
+  } finally {
+    isNavigating = false;
+  }
+}
+
+async function goPrev() {
+  if (isNavigating) return;
+  isNavigating = true;
+  try {
+    await rendition.prev();
+  } catch (err) {
+    console.error(err);
+  } finally {
+    isNavigating = false;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // EPUB rendering
 // ---------------------------------------------------------------------------
 
@@ -213,8 +243,8 @@ async function openBook() {
 
     const width = contents.window.innerWidth;
     const x = event.clientX;
-    if (x < width * 0.3) rendition.prev();
-    else if (x > width * 0.7) rendition.next();
+    if (x < width * 0.3) goPrev();
+    else if (x > width * 0.7) goNext();
   });
 
   await book.ready;
@@ -436,25 +466,24 @@ function waitForNextPaint() {
 
 function bindReaderNavigation() {
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowRight') rendition.next();
-    if (e.key === 'ArrowLeft') rendition.prev();
+    if (e.key === 'ArrowRight') goNext();
+    if (e.key === 'ArrowLeft') goPrev();
   });
 
   const viewerEl = document.getElementById('viewer');
   viewerEl.addEventListener('click', (e) => {
     const { left, width } = viewerEl.getBoundingClientRect();
     const x = e.clientX - left;
-    if (x < width * 0.3) rendition.prev();
-    else if (x > width * 0.7) rendition.next();
+    if (x < width * 0.3) goPrev();
+    else if (x > width * 0.7) goNext();
   });
 
-  // Swipe support for touch devices
   let touchStartX = null;
   viewerEl.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; });
   viewerEl.addEventListener('touchend', (e) => {
     if (touchStartX === null) return;
     const dx = e.changedTouches[0].clientX - touchStartX;
-    if (Math.abs(dx) > 50) dx > 0 ? rendition.prev() : rendition.next();
+    if (Math.abs(dx) > 50) dx > 0 ? goPrev() : goNext();
     touchStartX = null;
   });
 }
