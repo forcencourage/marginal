@@ -34,6 +34,7 @@ const highlightCount = document.getElementById('highlight-count');
 
 const panel = document.getElementById('highlights-panel');
 const panelToggle = document.getElementById('panel-toggle');
+const panelClose = document.getElementById('panel-close');
 const panelScrim = document.getElementById('panel-scrim');
 
 const tocToggle = document.getElementById('toc-toggle');
@@ -117,10 +118,10 @@ function bindHeaderControls() {
 
   panelToggle.addEventListener('click', () => {
     closeTocPanel();
-    panel.classList.add('open');
-    panelScrim.classList.add('open');
+    openPanel();
   });
   panelScrim.addEventListener('click', closePanel);
+  panelClose.addEventListener('click', closePanel);
 
   tocToggle.addEventListener('click', () => {
     closePanel();
@@ -152,9 +153,16 @@ function flushProgress() {
   }
 }
 
+function openPanel() {
+  panel.classList.add('open');
+  panelScrim.classList.add('open');
+  panelToggle.setAttribute('aria-expanded', 'true');
+}
+
 function closePanel() {
   panel.classList.remove('open');
   panelScrim.classList.remove('open');
+  panelToggle.setAttribute('aria-expanded', 'false');
 }
 
 function openTocPanel() {
@@ -440,7 +448,7 @@ function addHighlightCard(row) {
 }
 
 async function goToHighlight(cfiRange, card) {
-  if (window.innerWidth <= 860) closePanel();
+  closePanel();
   try {
     const cfiObj = new ePub.CFI(cfiRange);
     cfiObj.collapse(true);
@@ -468,6 +476,7 @@ function bindReaderNavigation() {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowRight') goNext();
     if (e.key === 'ArrowLeft') goPrev();
+    if (e.key === 'Escape') { closePanel(); closeTocPanel(); }
   });
 
   const viewerEl = document.getElementById('viewer');
