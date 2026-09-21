@@ -905,9 +905,10 @@ body.reader-page .reader-header {
 }
 
 .search-bar {
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  z-index: 9; /* above the book, below the toast, confirm bar and side panels */
+  position: absolute;          /* the sticky header is its containing block */
+  top: calc(100% + 1px);       /* just under the header, keeping its bottom line visible */
+  left: 0; right: 0;
+  z-index: 1;
   height: var(--search-bar-h);
   display: flex;
   align-items: center;
@@ -920,6 +921,7 @@ body.reader-page .reader-header {
   color: var(--charcoal-text);
   animation: search-drop 0.18s ease-out;
 }
+
 @keyframes search-drop {
   from { opacity: 0; transform: translateY(-6px); }
 }
