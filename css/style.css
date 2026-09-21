@@ -29,6 +29,10 @@
 
   --shadow-card: 0 1px 2px rgba(19, 19, 21, 0.06), 0 8px 24px rgba(19, 19, 21, 0.06);
   --shadow-card-hover: 0 6px 16px rgba(19, 19, 21, 0.12), 0 16px 40px rgba(19, 19, 21, 0.1);
+
+  --search: #ffd93b;
+  --search-strong: #ffbf00;
+  --search-bar-h: 56px;
 }
 
 * { box-sizing: border-box; }
@@ -595,11 +599,10 @@ body.reader-page .reader-header {
 }
 
 #viewer {
-  padding: 6% 9%;
+  padding: max(6%, calc(var(--search-bar-h) + 8px)) 9% 6%;
   box-sizing: border-box;
-  /* Ensure width/height are still handled correctly */
   width: 100%;
-  max-width: 960px;  
+  max-width: 960px;
   margin: 0 auto;
   height: 100%;
 }
@@ -902,14 +905,18 @@ body.reader-page .reader-header {
 }
 
 .search-bar {
-  flex: none;
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  z-index: 9; /* above the book, below the toast, confirm bar and side panels */
+  height: var(--search-bar-h);
   display: flex;
   align-items: center;
   gap: 8px;
   /* lines up with the reading column (max 960px) on wide screens */
-  padding: 10px max(clamp(16px, 3vw, 32px), calc((100% - 960px) / 2));
+  padding: 0 max(clamp(16px, 3vw, 32px), calc((100% - 960px) / 2));
   background: var(--charcoal-soft);
   border-bottom: 1px solid var(--charcoal-line);
+  box-shadow: 0 10px 24px rgba(19, 19, 21, 0.18);
   color: var(--charcoal-text);
   animation: search-drop 0.18s ease-out;
 }

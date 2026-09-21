@@ -694,7 +694,6 @@ function openSearch() {
   if (searchBar.hidden) {
     searchBar.hidden = false;
     searchToggle.setAttribute('aria-expanded', 'true');
-    reflowReader();
   }
   searchInput.focus();
   searchInput.select();
@@ -712,14 +711,6 @@ function closeSearch() {
   renderSearchStatus();
   searchBar.hidden = true;
   searchToggle.setAttribute('aria-expanded', 'false');
-  reflowReader();
-}
-
-// The bar changes the height available to the book, so let epub.js re-paginate.
-function reflowReader() {
-  requestAnimationFrame(() => {
-    try { rendition?.resize(); } catch (err) { console.error(err); }
-  });
 }
 
 // --- Running a search ------------------------------------------------------
