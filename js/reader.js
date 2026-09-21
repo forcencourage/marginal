@@ -13,6 +13,11 @@ import { requireAuth } from './auth.js';
 const HIGHLIGHT_FILL = '#a9dcf5';
 const HIGHLIGHT_FILL_STRONG = '#7cc6ec';
 
+const SEARCH_STYLE        = { fill: '#ffd93b', 'fill-opacity': '0.55', 'mix-blend-mode': 'multiply' };
+const SEARCH_STYLE_ACTIVE = { fill: '#ffbf00', 'fill-opacity': '0.85', 'mix-blend-mode': 'multiply' };
+const SEARCH_MIN_CHARS = 2;
+const SEARCH_MAX_MATCHES = 2000;
+
 const params = new URLSearchParams(window.location.search);
 const bookId = params.get('id');
 
@@ -44,6 +49,16 @@ const tocPanel = document.getElementById('toc-panel');
 const tocList = document.getElementById('toc-list');
 const tocEmpty = document.getElementById('toc-empty');
 
+const searchToggle = document.getElementById('search-toggle');
+const searchBar = document.getElementById('search-bar');
+const searchInput = document.getElementById('search-input');
+const searchCount = document.getElementById('search-count');
+const searchSpinner = document.getElementById('search-spinner');
+const searchClear = document.getElementById('search-clear');
+const searchPrev = document.getElementById('search-prev');
+const searchNext = document.getElementById('search-next');
+const searchClose = document.getElementById('search-close');
+
 const REMOVE_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`;
 
 let bookRow = null;
@@ -54,6 +69,20 @@ let saveProgressTimer = null;
 let pendingSelection = null; // { cfiRange, contents, text } awaiting user confirmation
 let latestCfi = null;
 let latestPercent = 0;
+
+// Ranges of the user's saved highlights, so search hits never overwrite them.
+const userHighlightCfis = new Set();
+
+const search = {
+  query: '',          // the query the current results belong to
+  matches: [],        // [{ cfi, painted }] in reading order
+  active: -1,         // index of the match the reader is "on"
+  capped: false,
+  busy: false,
+  runId: 0,           // bumped on every new search so stale runs stop
+  timer: null,
+  jumpWhenDone: false,
+};
 
 if (!bookId) {
   window.location.href = 'index.html';
@@ -134,6 +163,7 @@ function bindHeaderControls() {
   confirmCancelBtn.addEventListener('click', cancelPendingHighlight);
 
   bindReaderNavigation();
+  bindSearchControls();
 
   // The debounced save (see scheduleProgressSave) can miss the very last
   // position if the reader navigates away before it fires. Flush
@@ -244,6 +274,10 @@ async function openBook() {
   });
 
   rendition.on('selected', onTextSelected);
+
+  rendition.on('keydown', (e) => {
+    if (isFindShortcut(e)) { e.preventDefault(); openSearch(); }
+  });
 
   rendition.on('click', (event, contents) => {
     const hasSelection = contents.window.getSelection?.().toString().trim();
@@ -368,6 +402,8 @@ function clearSelection(contents) {
 }
 
 function paintHighlight(cfiRange) {
+  userHighlightCfis.add(cfiRange);
+  rendition.annotations.remove(cfiRange, 'highlight'); // replaces a search hit on the exact same text, if any
   rendition.annotations.add(
     'highlight',
     cfiRange,
@@ -376,6 +412,11 @@ function paintHighlight(cfiRange) {
     'epubjs-hl',
     { fill: HIGHLIGHT_FILL, 'fill-opacity': '0.6' }
   );
+}
+
+function unpaintHighlight(cfiRange) {
+  userHighlightCfis.delete(cfiRange);
+  rendition.annotations.remove(cfiRange, 'highlight');
 }
 
 function showToast() {
@@ -474,9 +515,21 @@ function waitForNextPaint() {
 
 function bindReaderNavigation() {
   document.addEventListener('keydown', (e) => {
+    if (isFindShortcut(e)) { e.preventDefault(); openSearch(); return; }
+
+    if (e.key === 'Escape') {
+      const panelOpen = panel.classList.contains('open') || tocPanel.classList.contains('open');
+      closePanel();
+      closeTocPanel();
+      if (!panelOpen) closeSearch();
+      return;
+    }
+
+    const typing = e.target instanceof Element && e.target.closest('input, textarea, select, [contenteditable]');
+    if (typing) return;
+
     if (e.key === 'ArrowRight') goNext();
     if (e.key === 'ArrowLeft') goPrev();
-    if (e.key === 'Escape') { closePanel(); closeTocPanel(); }
   });
 
   const viewerEl = document.getElementById('viewer');
@@ -578,4 +631,302 @@ function updateActiveTocLink(href) {
     const elBase = (el.dataset.href || '').split('#')[0];
     el.classList.toggle('active', elBase === base);
   });
+}
+
+
+// ---------------------------------------------------------------------------
+// In-book search
+// ---------------------------------------------------------------------------
+
+const BLOCK_TAGS = new Set([
+  'address', 'article', 'aside', 'blockquote', 'body', 'dd', 'div', 'dl', 'dt',
+  'figcaption', 'figure', 'footer', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header',
+  'hr', 'li', 'main', 'nav', 'ol', 'p', 'pre', 'section', 'table', 'tbody', 'td',
+  'tfoot', 'th', 'thead', 'tr', 'ul',
+]);
+const BLOCK_BREAK = '\u0001'; // stops a phrase from matching across two paragraphs
+
+function isFindShortcut(e) {
+  return (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && String(e.key).toLowerCase() === 'f';
+}
+
+function bindSearchControls() {
+  searchToggle.addEventListener('click', () => (searchBar.hidden ? openSearch() : closeSearch()));
+  searchClose.addEventListener('click', closeSearch);
+  searchPrev.addEventListener('click', () => stepMatch(-1));
+  searchNext.addEventListener('click', () => stepMatch(1));
+
+  searchClear.addEventListener('click', () => {
+    searchInput.value = '';
+    clearTimeout(search.timer);
+    runSearch('');
+    searchInput.focus();
+  });
+
+  // Live search: highlight while typing, without moving the reader.
+  searchInput.addEventListener('input', () => {
+    clearTimeout(search.timer);
+    const q = searchInput.value.trim();
+    searchClear.hidden = !searchInput.value;
+    if (!q) { runSearch(''); return; }
+    search.timer = setTimeout(() => runSearch(q), 300);
+  });
+
+  // Enter: run right away and jump to the first hit, or step to the next one.
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const q = searchInput.value.trim();
+    if (q !== search.query) {
+      clearTimeout(search.timer);
+      runSearch(q, { jump: true });
+    } else if (search.busy) {
+      search.jumpWhenDone = true;
+    } else {
+      stepMatch(e.shiftKey ? -1 : 1);
+    }
+  });
+}
+
+function openSearch() {
+  closePanel();
+  closeTocPanel();
+  if (searchBar.hidden) {
+    searchBar.hidden = false;
+    searchToggle.setAttribute('aria-expanded', 'true');
+    reflowReader();
+  }
+  searchInput.focus();
+  searchInput.select();
+}
+
+function closeSearch() {
+  if (searchBar.hidden) return;
+  clearTimeout(search.timer);
+  search.runId++;          // cancels a scan that may still be running
+  search.busy = false;
+  clearSearchResults();
+  search.query = '';
+  searchInput.value = '';
+  searchClear.hidden = true;
+  renderSearchStatus();
+  searchBar.hidden = true;
+  searchToggle.setAttribute('aria-expanded', 'false');
+  reflowReader();
+}
+
+// The bar changes the height available to the book, so let epub.js re-paginate.
+function reflowReader() {
+  requestAnimationFrame(() => {
+    try { rendition?.resize(); } catch (err) { console.error(err); }
+  });
+}
+
+// --- Running a search ------------------------------------------------------
+
+async function runSearch(query, { jump = false } = {}) {
+  if (!book || !rendition) return;
+
+  const runId = ++search.runId;
+  clearSearchResults();
+  search.query = query;
+  search.jumpWhenDone = jump;
+  search.busy = false;
+  renderSearchStatus();
+
+  const regex = query.length >= SEARCH_MIN_CHARS ? buildSearchRegex(query) : null;
+  if (!regex) return;
+
+  search.busy = true;
+  renderSearchStatus();
+  await book.ready;
+
+  for (const item of book.spine.spineItems) {
+    if (runId !== search.runId) return;
+
+    let cfis = [];
+    try {
+      cfis = await searchSection(item, regex, SEARCH_MAX_MATCHES - search.matches.length);
+    } catch (err) {
+      console.warn('Search skipped a section', item.href, err);
+    }
+    if (runId !== search.runId) return; // a newer search took over while we waited
+
+    for (const cfi of cfis) {
+      const match = { cfi, painted: false };
+      paintMatch(match, false);
+      search.matches.push(match);
+    }
+    renderSearchStatus(); // the count grows live as sections are scanned
+
+    if (search.matches.length >= SEARCH_MAX_MATCHES) { search.capped = true; break; }
+    await new Promise((resolve) => setTimeout(resolve)); // let the UI breathe
+  }
+
+  search.busy = false;
+  renderSearchStatus();
+  if (search.jumpWhenDone && search.matches.length) stepMatch(1);
+}
+
+// Lower-case, strip accents, straighten curly quotes: "École" and "ecole" match.
+function foldChar(ch) {
+  const code = ch.charCodeAt(0);
+  if (code < 128) return ch.toLowerCase();
+  if (code === 0x2018 || code === 0x2019 || code === 0x2032) return "'";
+  if (code === 0x201c || code === 0x201d) return '"';
+  return ch.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+function buildSearchRegex(query) {
+  const words = query.split('').map(foldChar).join('').split(/\s+/).filter(Boolean);
+  if (!words.length) return null;
+  const escape = (w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(words.map(escape).join('\\s+'), 'g'); // any whitespace run matches
+}
+
+// Returns the CFI ranges of every hit in one spine section.
+async function searchSection(item, regex, room) {
+  const wasLoaded = Boolean(item.contents);
+  const contents = await item.load(book.load.bind(book));
+  try {
+    const doc = contents.ownerDocument || item.document;
+    const root = doc && (doc.body || doc.documentElement);
+    if (!root || room <= 0) return [];
+
+    // 1. Flatten the section into one folded string, remembering which text
+    //    node + offset each character came from (so hits can span <em>, <a>…).
+    let hay = '';
+    const srcNode = [];
+    const srcOffset = [];
+    const push = (ch, node, offset) => { hay += ch; srcNode.push(node); srcOffset.push(offset); };
+
+    const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      if (node.nodeType === 1) {
+        const tag = node.localName.toLowerCase();
+        if (BLOCK_TAGS.has(tag)) push(BLOCK_BREAK, null, 0);
+        else if (tag === 'br') push(' ', null, 0);
+        continue;
+      }
+      const parentTag = node.parentNode && node.parentNode.localName && node.parentNode.localName.toLowerCase();
+      if (parentTag === 'script' || parentTag === 'style') continue;
+
+      const text = node.nodeValue;
+      for (let i = 0; i < text.length; i++) {
+        for (const c of foldChar(text[i])) push(c, node, i);
+      }
+    }
+
+    // 2. Find hits and turn each into a CFI range.
+    const cfis = [];
+    regex.lastIndex = 0;
+    let m;
+    while (cfis.length < room && (m = regex.exec(hay))) {
+      const first = m.index;
+      const last = m.index + m[0].length - 1;
+      if (!srcNode[first] || !srcNode[last]) continue;
+      const range = doc.createRange();
+      range.setStart(srcNode[first], srcOffset[first]);
+      range.setEnd(srcNode[last], srcOffset[last] + 1);
+      cfis.push(item.cfiFromRange(range));
+    }
+    return cfis;
+  } finally {
+    if (!wasLoaded) item.unload();
+  }
+}
+
+// --- Highlighting & navigation --------------------------------------------
+
+function paintMatch(match, active) {
+  if (userHighlightCfis.has(match.cfi)) return; // already covered by a saved highlight
+  if (match.painted) rendition.annotations.remove(match.cfi, 'highlight');
+  rendition.annotations.add(
+    'highlight',
+    match.cfi,
+    {},
+    undefined,
+    'epubjs-search-hl',
+    active ? SEARCH_STYLE_ACTIVE : SEARCH_STYLE
+  );
+  match.painted = true;
+}
+
+function clearSearchResults() {
+  for (const match of search.matches) {
+    if (match.painted && !userHighlightCfis.has(match.cfi)) {
+      rendition.annotations.remove(match.cfi, 'highlight');
+    }
+  }
+  search.matches = [];
+  search.active = -1;
+  search.capped = false;
+}
+
+// Index of the first hit at or after the given reading position.
+function firstMatchFrom(cfi) {
+  if (!cfi) return 0;
+  const cfiTool = new ePub.CFI();
+  const idx = search.matches.findIndex((m) => cfiTool.compare(m.cfi, cfi) >= 0);
+  return idx === -1 ? 0 : idx;
+}
+
+async function stepMatch(dir) {
+  const total = search.matches.length;
+  if (!total) return;
+
+  let next;
+  if (search.active < 0) {
+    // first jump: start from where the reader currently is
+    const from = firstMatchFrom(latestCfi);
+    next = dir > 0 ? from : (from - 1 + total) % total;
+  } else {
+    next = (search.active + dir + total) % total;
+  }
+  await activateMatch(next);
+}
+
+async function activateMatch(index) {
+  const previous = search.matches[search.active];
+  search.active = index;
+  if (previous) paintMatch(previous, false);
+
+  const match = search.matches[index];
+  paintMatch(match, true);
+  renderSearchStatus();
+
+  try {
+    const target = new ePub.CFI(match.cfi);
+    target.collapse(true);
+    await rendition.display(target.toString());
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function renderSearchStatus() {
+  const total = search.matches.length;
+  const more = search.capped ? '+' : '';
+  let text = '';
+  let state = '';
+
+  if (search.query.length >= SEARCH_MIN_CHARS) {
+    if (total) {
+      const n = total.toLocaleString();
+      text = search.active >= 0
+        ? `${(search.active + 1).toLocaleString()} / ${n}${more}`
+        : `${n}${more} ${total === 1 && !more ? 'occurrence' : 'occurrences'}`;
+    } else if (search.busy) {
+      text = 'Searching…';
+    } else {
+      text = 'No occurrences';
+      state = 'none';
+    }
+  }
+
+  searchCount.textContent = text;
+  searchCount.dataset.state = state;
+  searchSpinner.hidden = !search.busy;
+  searchPrev.disabled = searchNext.disabled = total === 0;
 }

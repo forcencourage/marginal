@@ -880,3 +880,118 @@ body.reader-page .reader-header {
 .btn-text:hover { color: var(--charcoal-text); }
 .btn-danger-text:hover { color: var(--danger); }
 .btn-text:disabled { opacity: 0.5; pointer-events: none; }
+
+/* ============================================================================
+   In-book search
+   ============================================================================ */
+
+:root {
+  --search: #ffd93b;
+  --search-strong: #ffbf00;
+}
+
+/* author display rules below would otherwise beat the [hidden] attribute */
+[hidden] { display: none !important; }
+
+.icon-btn:disabled { opacity: 0.35; pointer-events: none; }
+
+#search-toggle[aria-expanded="true"] {
+  color: var(--search);
+  border-color: var(--search);
+  background: rgba(255, 217, 59, 0.1);
+}
+
+.search-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* lines up with the reading column (max 960px) on wide screens */
+  padding: 10px max(clamp(16px, 3vw, 32px), calc((100% - 960px) / 2));
+  background: var(--charcoal-soft);
+  border-bottom: 1px solid var(--charcoal-line);
+  color: var(--charcoal-text);
+  animation: search-drop 0.18s ease-out;
+}
+@keyframes search-drop {
+  from { opacity: 0; transform: translateY(-6px); }
+}
+.search-bar :focus-visible { outline-color: var(--search); }
+
+.search-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 8px 0 14px;
+  background: var(--charcoal);
+  border: 1px solid var(--charcoal-line);
+  border-radius: 999px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.search-field:focus-within {
+  border-color: var(--search);
+  box-shadow: 0 0 0 3px rgba(255, 217, 59, 0.16);
+}
+
+.search-icon { width: 16px; height: 16px; flex: none; color: #8b8a86; }
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--charcoal-text);
+  font: inherit;
+  font-size: 14px;
+}
+.search-input:focus-visible { outline: none; } /* the field shows the focus ring */
+.search-input::placeholder { color: #77767a; }
+
+.search-spinner {
+  flex: none;
+  border-color: rgba(255, 255, 255, 0.16);
+  border-top-color: var(--search);
+}
+
+.search-count {
+  flex: none;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(255, 217, 59, 0.14);
+  color: var(--search);
+  font-size: 12px;
+  font-weight: 560;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.search-count:empty { display: none; }
+.search-count[data-state="none"] {
+  background: rgba(196, 85, 75, 0.18);
+  color: #e4897f;
+}
+
+.search-clear {
+  flex: none;
+  width: 24px; height: 24px;
+  display: flex; align-items: center; justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: #8b8a86;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.search-clear:hover { background: var(--charcoal-soft); color: var(--charcoal-text); }
+.search-clear svg { width: 13px; height: 13px; }
+
+.search-nav { display: flex; gap: 6px; flex: none; }
+
+@media (max-width: 520px) {
+  .search-bar { gap: 6px; }
+  .search-icon { display: none; }
+  .search-field { padding-left: 12px; }
+}
