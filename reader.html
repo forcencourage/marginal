@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,450;9..144,500;9..144,600&family=Inter:wght@400;500;560;650&display=swap" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.snow.css" rel="stylesheet" />
 <link rel="stylesheet" href="css/style.css" />
 <link rel="icon" href="favicon.svg" type="image/svg+xml" />
 <link rel="alternate icon" href="favicon.ico" />
@@ -109,7 +110,7 @@
     </div>
     <div class="selection-toast" id="selection-toast">
       <span class="dot"></span>
-      <span>Highlight saved</span>
+      <span id="toast-text">Highlight saved</span>
     </div>
     <div class="confirm-bar" id="confirm-bar">
       <span class="confirm-text" id="confirm-text">Highlight this selection?</span>
@@ -118,6 +119,57 @@
         <button class="btn btn-sm" id="confirm-save" type="button">Highlight</button>
       </div>
     </div>
+
+    <!-- Reaction picker modal -->
+    <div class="overlay reaction-overlay" id="reaction-overlay">
+      <div class="overlay-card reaction-modal" role="dialog" aria-modal="true" aria-labelledby="reaction-modal-title">
+        <button class="icon-btn reaction-modal-close" id="reaction-modal-close" aria-label="Close" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+        <h3 id="reaction-modal-title">React to this highlight</h3>
+
+        <div class="reaction-tabs" role="tablist">
+          <button class="reaction-tab active" data-tab="like" role="tab" aria-selected="true" type="button">Like</button>
+          <button class="reaction-tab" data-tab="emoji" role="tab" aria-selected="false" type="button">Emoji</button>
+          <button class="reaction-tab" data-tab="comment" role="tab" aria-selected="false" type="button">Comment</button>
+        </div>
+
+        <div class="reaction-panels">
+          <div class="reaction-panel active" data-panel="like">
+            <button class="like-big" id="like-big-btn" type="button" aria-pressed="true">
+              <img src="reactions/like.png" alt="Like" />
+            </button>
+          </div>
+
+          <div class="reaction-panel" data-panel="emoji">
+            <div class="emoji-grid" id="emoji-grid"></div>
+          </div>
+
+          <div class="reaction-panel" data-panel="comment">
+            <div id="comment-editor" class="comment-editor"></div>
+          </div>
+        </div>
+
+        <div class="reaction-modal-footer">
+          <button class="btn btn-react" id="react-submit-btn" type="button">React</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reaction viewer modal -->
+    <div class="overlay reaction-overlay" id="reaction-view-overlay">
+      <div class="overlay-card reaction-view-modal" role="dialog" aria-modal="true" aria-labelledby="reaction-view-title">
+        <button class="icon-btn reaction-modal-close" id="reaction-view-close" aria-label="Close" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+        <h3 id="reaction-view-title">Reaction</h3>
+        <div class="reaction-view-body" id="reaction-view-body"></div>
+        <div class="reaction-modal-footer">
+          <button class="btn btn-ghost btn-sm" id="reaction-view-edit-btn" type="button">Change reaction</button>
+        </div>
+      </div>
+    </div>
+
   </section>
 </div>
 
@@ -126,6 +178,7 @@
 <script src="https://cdn.jsdelivr.net/gh/forcencourage/epub.js.2.0@49137e23b966b746596fcc1053488bdb7ea0bd23/epub.js"></script>
 <!-- <script src="https://cdn.jsdelivr.net/gh/forcencourage/epub.js.2.0@main/epub.js"></script> -->
 <!-- <script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script> -->
+<script src="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.js"></script>
 <script type="module" src="js/reader.js"></script>
 </body>
 </html>

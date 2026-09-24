@@ -7,6 +7,8 @@ import {
   deleteHighlight,
   updateBookProgress,
   flushBookProgress,
+  fetchReactionsForBook,
+  upsertReaction,
 } from './supabaseClient.js';
 import { requireAuth } from './auth.js';
 
@@ -59,6 +61,21 @@ const searchPrev = document.getElementById('search-prev');
 const searchNext = document.getElementById('search-next');
 const searchClose = document.getElementById('search-close');
 
+const toastText = document.getElementById('toast-text');
+
+const reactionOverlay = document.getElementById('reaction-overlay');
+const reactionModalClose = document.getElementById('reaction-modal-close');
+const reactionTabs = document.querySelectorAll('.reaction-tab');
+const reactionPanels = document.querySelectorAll('.reaction-panel');
+const likeBigBtn = document.getElementById('like-big-btn');
+const emojiGrid = document.getElementById('emoji-grid');
+const reactSubmitBtn = document.getElementById('react-submit-btn');
+
+const reactionViewOverlay = document.getElementById('reaction-view-overlay');
+const reactionViewClose = document.getElementById('reaction-view-close');
+const reactionViewBody = document.getElementById('reaction-view-body');
+const reactionViewEditBtn = document.getElementById('reaction-view-edit-btn');
+
 const REMOVE_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`;
 
 let bookRow = null;
@@ -69,6 +86,122 @@ let saveProgressTimer = null;
 let pendingSelection = null; // { cfiRange, contents, text } awaiting user confirmation
 let latestCfi = null;
 let latestPercent = 0;
+
+let reactionsByHighlight = new Map(); // highlightId -> reaction row
+let currentReactionHighlight = null;
+let activeReactionTab = 'like';
+let selectedEmojiFile = null;
+let quill = null;
+
+// Rename the files here to match whatever you put in reactions/emojis/
+const EMOJI_OPTIONS = [
+  { file: '1F60A.svg', label: 'Smile' },
+  { file: '1F60B.svg', label: 'Yum' },
+  { file: '1F60C.svg', label: 'Relieved' },
+  { file: '1F60D.svg', label: 'Love' },
+  { file: '1F60E.svg', label: 'Cool' },
+  { file: '1F60F.svg', label: 'Smirk' },
+  { file: '1F61A.svg', label: 'Kiss' },
+  { file: '1F61B.svg', label: 'Tongue' },
+  { file: '1F61C.svg', label: 'Wink Tongue' },
+  { file: '1F61D.svg', label: 'Laughing' },
+  { file: '1F61E.svg', label: 'Disappointed' },
+  { file: '1F61F.svg', label: 'Worried' },
+  { file: '1F62A.svg', label: 'Sleepy' },
+
+  { file: '1F62B.svg', label: 'Tired' },
+  { file: '1F62C.svg', label: 'Grimace' },
+  { file: '1F62D.svg', label: 'Crying' },
+  { file: '1F62E.svg', label: 'Open Mouth' },
+  { file: '1F62E-200D-1F4A8.svg', label: 'Exhale' },
+  { file: '1F62F.svg', label: 'Surprised' },
+  { file: '1F92A.svg', label: 'Crazy' },
+  { file: '1F92B.svg', label: 'Shushing' },
+  { file: '1F92D.svg', label: 'Hand Over Mouth' },
+  { file: '1F92E.svg', label: 'Vomiting' },
+  { file: '1F92F.svg', label: 'Exploding Head' },
+  { file: '1F97A.svg', label: 'Pleading' },
+  { file: '1F600.svg', label: 'Grinning' },
+
+  { file: '1F601.svg', label: 'Beaming' },
+  { file: '1F602.svg', label: 'Tears of Joy' },
+  { file: '1F603.svg', label: 'Happy' },
+  { file: '1F604.svg', label: 'Big Smile' },
+  { file: '1F605.svg', label: 'Nervous Laugh' },
+  { file: '1F606.svg', label: 'Squint Laugh' },
+  { file: '1F607.svg', label: 'Angel' },
+  { file: '1F608.svg', label: 'Devil' },
+  { file: '1F609.svg', label: 'Wink' },
+  { file: '1F610.svg', label: 'Neutral' },
+  { file: '1F611.svg', label: 'Expressionless' },
+  { file: '1F612.svg', label: 'Unamused' },
+  { file: '1F613.svg', label: 'Sweat' },
+
+  { file: '1F614.svg', label: 'Pensive' },
+  { file: '1F615.svg', label: 'Confused' },
+  { file: '1F616.svg', label: 'Scrunched' },
+  { file: '1F617.svg', label: 'Kissing' },
+  { file: '1F618.svg', label: 'Kiss Love' },
+  { file: '1F619.svg', label: 'Kiss Smile' },
+  { file: '1F620.svg', label: 'Angry' },
+  { file: '1F621.svg', label: 'Pouting' },
+  { file: '1F622.svg', label: 'Sad' },
+  { file: '1F623.svg', label: 'Persevering' },
+  { file: '1F624.svg', label: 'Frustrated' },
+  { file: '1F625.svg', label: 'Relieved Cry' },
+  { file: '1F626.svg', label: 'Frowning' },
+
+  { file: '1F627.svg', label: 'Concerned' },
+  { file: '1F628.svg', label: 'Fearful' },
+  { file: '1F629.svg', label: 'Weary' },
+  { file: '1F630.svg', label: 'Anxious' },
+  { file: '1F631.svg', label: 'Scream' },
+  { file: '1F632.svg', label: 'Astonished' },
+  { file: '1F633.svg', label: 'Flushed' },
+  { file: '1F634.svg', label: 'Sleeping' },
+  { file: '1F635.svg', label: 'Dizzy' },
+  { file: '1F635-200D-1F4AB.svg', label: 'Spiral Eyes' },
+  { file: '1F636.svg', label: 'No Mouth' },
+  { file: '1F636-200D-1F32B-FE0F.svg', label: 'Hidden Face' },
+  { file: '1F637.svg', label: 'Mask' },
+
+  { file: '1F641.svg', label: 'Slightly Sad' },
+  { file: '1F642.svg', label: 'Slight Smile' },
+  { file: '1F643.svg', label: 'Upside Down' },
+  { file: '1F644.svg', label: 'Eye Roll' },
+  { file: '1F910.svg', label: 'Zipper Mouth' },
+  { file: '1F911.svg', label: 'Money' },
+  { file: '1F912.svg', label: 'Sick' },
+  { file: '1F913.svg', label: 'Nerd' },
+  { file: '1F914.svg', label: 'Thinking' },
+  { file: '1F915.svg', label: 'Injured' },
+  { file: '1F917.svg', label: 'Hug' },
+  { file: '1F920.svg', label: 'Cowboy' },
+  { file: '1F921.svg', label: 'Clown' },
+
+  { file: '1F922.svg', label: 'Nauseous' },
+  { file: '1F923.svg', label: 'Rolling Laugh' },
+  { file: '1F924.svg', label: 'Drooling' },
+  { file: '1F925.svg', label: 'Liar' },
+  { file: '1F927.svg', label: 'Sneezing' },
+  { file: '1F928.svg', label: 'Raised Eyebrow' },
+  { file: '1F929.svg', label: 'Star Eyes' },
+  { file: '1F970.svg', label: 'Hearts' },
+  { file: '1F971.svg', label: 'Yawn' },
+  { file: '1F972.svg', label: 'Happy Tear' },
+  { file: '1F973.svg', label: 'Party' },
+  { file: '1F974.svg', label: 'Woozy' },
+  { file: '1F975.svg', label: 'Hot' },
+
+  { file: '1F976.svg', label: 'Cold' },
+  { file: '1F978.svg', label: 'Disguise' },
+  { file: '263A.svg', label: 'Classic Smile' },
+  { file: '2639.svg', label: 'Classic Sad' },
+  { file: 'E280.svg', label: 'Annoyed' },
+  { file: 'E281.svg', label: 'Whistle' },
+  { file: 'E282.svg', label: 'Speechless' },
+  { file: 'E283.svg', label: 'Playful' }
+];
 
 // Ranges of the user's saved highlights, so search hits never overwrite them.
 const userHighlightCfis = new Set();
@@ -91,7 +224,6 @@ if (!bookId) {
 }
 
 async function init() {
-
   const session = await requireAuth();
   if (!session) return;
 
@@ -110,9 +242,12 @@ async function init() {
 
   bindHeaderControls();
 
-  // Fetch the book file and the saved highlights in parallel, but only paint
-  // highlights into the page once the rendition actually exists.
-  const [, rows] = await Promise.all([openBook(), fetchHighlights(bookId).catch((err) => { console.error(err); return []; })]);
+  const [, rows, reactionRows] = await Promise.all([
+    openBook(),
+    fetchHighlights(bookId).catch((err) => { console.error(err); return []; }),
+    fetchReactionsForBook(bookId).catch((err) => { console.error(err); return []; }),
+  ]);
+  reactionsByHighlight = new Map(reactionRows.map((r) => [r.highlight_id, r]));
   renderHighlightList(rows);
 
   const hlParam = params.get('hl');
@@ -164,6 +299,7 @@ function bindHeaderControls() {
 
   bindReaderNavigation();
   bindSearchControls();
+  bindReactionControls();
 
   // The debounced save (see scheduleProgressSave) can miss the very last
   // position if the reader navigates away before it fires. Flush
@@ -374,14 +510,16 @@ async function confirmPendingHighlight() {
   pendingSelection = null;
   hideConfirmBar();
 
-  paintHighlight(cfiRange);
+  paintHighlight(cfiRange); // optimistic paint, no click handler yet (no id)
   clearSelection(contents);
 
   try {
     const row = await insertHighlight({ bookId, cfiRange, textSnippet: text });
+    paintHighlight(cfiRange, row); // repaint now that we have an id, wiring the click handler
     addHighlightCard(row);
     updateHighlightCount();
-    showToast();
+    showToast('Highlight saved');
+    openReactionModal(row);
   } catch (err) {
     console.error('Could not save highlight', err);
     rendition.annotations.remove(cfiRange, 'highlight');
@@ -401,14 +539,14 @@ function clearSelection(contents) {
   selection?.removeAllRanges?.();
 }
 
-function paintHighlight(cfiRange) {
+function paintHighlight(cfiRange, row) {
   userHighlightCfis.add(cfiRange);
   rendition.annotations.remove(cfiRange, 'highlight'); // replaces a search hit on the exact same text, if any
   rendition.annotations.add(
     'highlight',
     cfiRange,
     {},
-    undefined,
+    row ? () => handleHighlightClick(row) : undefined,
     'epubjs-hl',
     { fill: HIGHLIGHT_FILL, 'fill-opacity': '0.6' }
   );
@@ -419,7 +557,8 @@ function unpaintHighlight(cfiRange) {
   rendition.annotations.remove(cfiRange, 'highlight');
 }
 
-function showToast() {
+function showToast(message = 'Highlight saved') {
+  toastText.textContent = message;
   toast.classList.add('show');
   clearTimeout(showToast._t);
   showToast._t = setTimeout(() => toast.classList.remove('show'), 1600);
@@ -435,12 +574,10 @@ function renderHighlightList(rows) {
 
   for (const row of rows) {
     addHighlightCard(row);
-    paintHighlight(row.cfi_range);
+    paintHighlight(row.cfi_range, row);
+    const reaction = reactionsByHighlight.get(row.id);
+    if (reaction) updateHighlightBadge(row.id, reaction);
   }
-  // epub.js re-attaches known annotations to each section automatically as
-  // it's (re)rendered while scrolling — no need to re-add them ourselves.
-  // Doing so on every 'rendered' event stacked duplicate highlight overlays
-  // on top of each other and eventually obscured the underlying text.
 }
 
 function addHighlightCard(row) {
@@ -475,6 +612,7 @@ function addHighlightCard(row) {
     try {
       await deleteHighlight(row.id);
       rendition.annotations.remove(row.cfi_range, 'highlight');
+      reactionsByHighlight.delete(row.id);
       card.remove();
       updateHighlightCount();
       highlightEmpty.style.display = highlightList.querySelectorAll('.highlight-card').length ? 'none' : 'block';
@@ -584,6 +722,187 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str ?? '';
   return div.innerHTML;
+}
+
+// ---------------------------------------------------------------------------
+// Reactions
+// ---------------------------------------------------------------------------
+
+function buildEmojiGrid() {
+  emojiGrid.innerHTML = '';
+  for (const { file, label } of EMOJI_OPTIONS) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'emoji-option';
+    btn.dataset.file = file;
+    btn.setAttribute('aria-label', label);
+    btn.innerHTML = `<img src="reactions/emojis/${file}" alt="${label}" />`;
+    btn.addEventListener('click', () => selectEmoji(file));
+    emojiGrid.appendChild(btn);
+  }
+}
+
+function selectEmoji(file) {
+  selectedEmojiFile = file;
+  emojiGrid.querySelectorAll('.emoji-option').forEach((el) => {
+    el.classList.toggle('selected', el.dataset.file === file);
+  });
+}
+
+function ensureQuill() {
+  if (quill) return quill;
+  quill = new Quill('#comment-editor', {
+    theme: 'snow',
+    placeholder: 'Write a comment about this passage…',
+    modules: {
+      toolbar: [['bold', 'italic', 'underline'], [{ list: 'ordered' }, { list: 'bullet' }], ['link'], ['clean']],
+    },
+  });
+  return quill;
+}
+
+function switchReactionTab(tab) {
+  activeReactionTab = tab;
+  reactionTabs.forEach((btn) => {
+    const isActive = btn.dataset.tab === tab;
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-selected', String(isActive));
+  });
+  reactionPanels.forEach((panel) => {
+    panel.classList.toggle('active', panel.dataset.panel === tab);
+  });
+  if (tab === 'comment') ensureQuill();
+}
+
+function resetReactionModal(existing) {
+  switchReactionTab(existing?.type || 'like');
+  likeBigBtn.setAttribute('aria-pressed', 'true');
+
+  selectedEmojiFile = existing?.type === 'emoji' ? existing.emoji : null;
+  buildEmojiGrid();
+  if (selectedEmojiFile) selectEmoji(selectedEmojiFile);
+
+  const editor = ensureQuill();
+  editor.setContents([]);
+  if (existing?.type === 'comment' && existing.comment) {
+    editor.clipboard.dangerouslyPasteHTML(existing.comment);
+  }
+}
+
+function openReactionModal(highlightRow, existingReaction = null) {
+  currentReactionHighlight = highlightRow;
+  resetReactionModal(existingReaction);
+  reactionOverlay.classList.add('open');
+}
+
+function closeReactionModal() {
+  reactionOverlay.classList.remove('open');
+  currentReactionHighlight = null;
+}
+
+async function submitReaction() {
+  if (!currentReactionHighlight) return;
+
+  const payload = { type: activeReactionTab, emoji: null, comment: null };
+
+  if (activeReactionTab === 'emoji') {
+    if (!selectedEmojiFile) {
+      emojiGrid.classList.add('shake');
+      setTimeout(() => emojiGrid.classList.remove('shake'), 400);
+      return;
+    }
+    payload.emoji = selectedEmojiFile;
+  } else if (activeReactionTab === 'comment') {
+    const isEmpty = quill.getText().trim().length === 0;
+    if (isEmpty) { quill.focus(); return; }
+    payload.comment = quill.root.innerHTML;
+  }
+
+  reactSubmitBtn.disabled = true;
+  try {
+    const row = await upsertReaction({ highlightId: currentReactionHighlight.id, ...payload });
+    reactionsByHighlight.set(currentReactionHighlight.id, row);
+    updateHighlightBadge(currentReactionHighlight.id, row);
+    closeReactionModal();
+    showToast('Reaction saved');
+  } catch (err) {
+    console.error('Could not save reaction', err);
+    alert('Could not save the reaction. See console for details.');
+  } finally {
+    reactSubmitBtn.disabled = false;
+  }
+}
+
+function handleHighlightClick(highlightRow) {
+  const reaction = reactionsByHighlight.get(highlightRow.id);
+  if (reaction) {
+    openReactionViewModal(highlightRow, reaction);
+  } else {
+    openReactionModal(highlightRow);
+  }
+}
+
+function openReactionViewModal(highlightRow, reaction) {
+  currentReactionHighlight = highlightRow;
+  reactionViewBody.innerHTML = renderReactionView(reaction);
+  reactionViewOverlay.classList.add('open');
+}
+
+function closeReactionViewModal() {
+  reactionViewOverlay.classList.remove('open');
+}
+
+function renderReactionView(reaction) {
+  if (reaction.type === 'like') {
+    return `
+      <img class="view-like-img" src="reactions/like.png" alt="Like" />
+      <span class="view-label">Liked this passage</span>
+    `;
+  }
+  if (reaction.type === 'emoji') {
+    return `<img class="view-emoji-img" src="reactions/emojis/${escapeHtml(reaction.emoji)}" alt="Reaction" />`;
+  }
+  return `<div class="view-comment">${reaction.comment || ''}</div>`;
+}
+
+function updateHighlightBadge(highlightId, reaction) {
+  const card = highlightList.querySelector(`.highlight-card[data-id="${highlightId}"]`);
+  if (!card) return;
+  let badge = card.querySelector('.highlight-reaction-badge');
+  if (!badge) {
+    badge = document.createElement('span');
+    highlightList.contains(card) && card.appendChild(badge);
+  }
+  badge.className = 'highlight-reaction-badge';
+  if (reaction.type === 'like') {
+    badge.innerHTML = `<img src="reactions/like.png" alt="Like" />`;
+  } else if (reaction.type === 'emoji') {
+    badge.innerHTML = `<img src="reactions/emojis/${escapeHtml(reaction.emoji)}" alt="" />`;
+  } else {
+    badge.textContent = '💬';
+  }
+}
+
+function bindReactionControls() {
+  reactionTabs.forEach((btn) => btn.addEventListener('click', () => switchReactionTab(btn.dataset.tab)));
+
+  likeBigBtn.addEventListener('click', () => {
+    likeBigBtn.classList.add('bump');
+    setTimeout(() => likeBigBtn.classList.remove('bump'), 180);
+  });
+
+  reactSubmitBtn.addEventListener('click', submitReaction);
+  reactionModalClose.addEventListener('click', closeReactionModal);
+  reactionOverlay.addEventListener('click', (e) => { if (e.target === reactionOverlay) closeReactionModal(); });
+
+  reactionViewClose.addEventListener('click', closeReactionViewModal);
+  reactionViewOverlay.addEventListener('click', (e) => { if (e.target === reactionViewOverlay) closeReactionViewModal(); });
+  reactionViewEditBtn.addEventListener('click', () => {
+    const reaction = reactionsByHighlight.get(currentReactionHighlight.id);
+    const row = currentReactionHighlight;
+    closeReactionViewModal();
+    openReactionModal(row, reaction);
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -160,3 +160,29 @@ export async function countHighlights(bookId) {
   if (error) throw error;
   return count ?? 0;
 }
+
+
+// Reactions ------------------------------------------------------------
+
+export async function fetchReactionsForBook(bookId) {
+  const { data, error } = await supabase
+    .from('highlight_reactions')
+    .select('*, highlights!inner(book_id)')
+    .eq('highlights.book_id', bookId);
+  if (error) throw error;
+  return data;
+}
+
+export async function upsertReaction({ highlightId, type, emoji = null, comment = null }) {
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data, error } = await supabase
+    .from('highlight_reactions')
+    .upsert(
+      { highlight_id: highlightId, user_id: user.id, type, emoji, comment },
+      { onConflict: 'highlight_id' }
+    )
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
