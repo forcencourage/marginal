@@ -868,12 +868,16 @@ function renderReactionView(reaction) {
 function updateHighlightBadge(highlightId, reaction) {
   const card = highlightList.querySelector(`.highlight-card[data-id="${highlightId}"]`);
   if (!card) return;
-  let badge = card.querySelector('.highlight-reaction-badge');
+  const textEl = card.querySelector('.highlight-text');
+  if (!textEl) return;
+
+  let badge = textEl.querySelector('.highlight-reaction-badge');
   if (!badge) {
     badge = document.createElement('span');
-    highlightList.contains(card) && card.appendChild(badge);
+    badge.className = 'highlight-reaction-badge';
+    textEl.prepend(badge); // must be the first node so the text after it wraps around it
   }
-  badge.className = 'highlight-reaction-badge';
+
   if (reaction.type === 'like') {
     badge.innerHTML = `<img src="reactions/like.png" alt="Like" />`;
   } else if (reaction.type === 'emoji') {
