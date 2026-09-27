@@ -1297,26 +1297,23 @@ function applyZoom() {
     return;
   }
 
-  // floor, not round — a box very slightly SMALLER than the footprint is
-  // safe; slightly bigger is what clips the last line
   const contentWidth = Math.floor(baseWidth / zoomLevel);
   const contentHeight = Math.floor(baseHeight / zoomLevel);
 
-  // Pure pixel math: position the box's top-left so its *unscaled* center
-  // lands exactly on the pane's center. Scaling around that same center
-  // (transform-origin: center center) then can't drift — no percentages,
-  // no ancestor-size feedback loop.
-  const left = Math.round((baseWidth - contentWidth) / 2);
-  const top = Math.round((baseHeight - contentHeight) / 2);
+  // Same centering offset as before, but now expressed as a translate()
+  // *inside* the transform property — so it animates in lockstep with
+  // scale() as one continuous motion instead of snapping ahead of it.
+  const dx = Math.round((baseWidth - contentWidth) / 2);
+  const dy = Math.round((baseHeight - contentHeight) / 2);
 
-  viewerEl.style.position = 'absolute'; // out of flow — can't inflate ancestors anymore
+  viewerEl.style.position = 'absolute';
   viewerEl.style.maxWidth = 'none';
   viewerEl.style.margin = '0';
-  viewerEl.style.left = `${left}px`;
-  viewerEl.style.top = `${top}px`;
+  viewerEl.style.left = '0';
+  viewerEl.style.top = '0';
   viewerEl.style.width = `${contentWidth}px`;
   viewerEl.style.height = `${contentHeight}px`;
-  viewerEl.style.transform = `scale(${zoomLevel})`;
+  viewerEl.style.transform = `translate(${dx}px, ${dy}px) scale(${zoomLevel})`;
 
   resizeRenditionTo(contentWidth, contentHeight);
 }
