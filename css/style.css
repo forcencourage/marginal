@@ -605,6 +605,10 @@ body.reader-page .reader-header {
   max-width: 960px;
   margin: 0 auto;
   height: 100%;
+
+  transform-origin: center center;
+  transition: transform 0.15s ease;
+  will-change: transform;
 }
 
 .reader-loading {
@@ -1224,4 +1228,43 @@ body.reader-page .reader-header {
 
 @media (max-width: 520px) {
   .emoji-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* Only dress it up like a "page on a canvas" once actually zoomed out */
+.reading-pane.zoomed-out {
+  background: #e7e9ec;
+}
+.reading-pane.zoomed-out #viewer {
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+}
+
+.zoom-controls {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 999px;
+  padding: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  z-index: 5;
+}
+.zoom-level {
+  font-family: Inter, sans-serif;
+  font-size: 12px;
+  min-width: 42px;
+  text-align: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #55565c;
+}
+.zoom-controls .icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
 }

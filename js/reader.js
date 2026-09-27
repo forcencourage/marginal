@@ -1244,3 +1244,48 @@ function renderSearchStatus() {
   searchSpinner.hidden = !search.busy;
   searchPrev.disabled = searchNext.disabled = total === 0;
 }
+
+const ZOOM_MIN = 0.4;
+const ZOOM_MAX = 1;
+const ZOOM_STEP = 0.1;
+let zoomLevel = 1;
+
+const readingPane = document.querySelector('.reading-pane');
+const zoomOutBtn = document.getElementById('zoom-out');
+const zoomInBtn = document.getElementById('zoom-in');
+const zoomLevelBtn = document.getElementById('zoom-level');
+
+function applyZoom() {
+  const viewerEl = document.getElementById('viewer');
+  viewerEl.style.transform = zoomLevel === 1 ? '' : `scale(${zoomLevel})`;
+  readingPane.classList.toggle('zoomed-out', zoomLevel < 0.999);
+  zoomLevelBtn.textContent = `${Math.round(zoomLevel * 100)}%`;
+  zoomOutBtn.disabled = zoomLevel <= ZOOM_MIN + 1e-9;
+  zoomInBtn.disabled = zoomLevel >= ZOOM_MAX - 1e-9;
+  try { localStorage.setItem('marginal:zoom', String(zoomLevel)); } catch {}
+}
+
+function setZoom(level) {
+  zoomLevel = Math.round(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, level)) * 100) / 100;
+  applyZoom();
+}
+const zoomOut = () => setZoom(zoomLevel - ZOOM_STEP);
+const zoomIn = () => setZoom(zoomLevel + ZOOM_STEP);
+const resetZoom = () => setZoom(1);
+
+function bindZoomControls() {
+  zoomOutBtn.addEventListener('click', zoomOut);
+  zoomInBtn.addEventListener('click', zoomIn);
+  zoomLevelBtn.addEventListener('click', resetZoom);
+
+  document.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    if (e.key === '-') { e.preventDefault(); zoomOut(); }
+    else if (e.key === '=' || e.key === '+') { e.preventDefault(); zoomIn(); }
+    else if (e.key === '0') { e.preventDefault(); resetZoom(); }
+  });
+
+  let saved = null;
+  try { saved = parseFloat(localStorage.getItem('marginal:zoom')); } catch {}
+  setZoom(Number.isFinite(saved) ? saved : 1);
+}
