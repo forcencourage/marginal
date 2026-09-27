@@ -1238,7 +1238,7 @@ body.reader-page .reader-header {
   bottom: 22px;
   z-index: 5;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   height: 40px;
   background: rgba(250, 249, 246, 0.85);
   backdrop-filter: blur(10px) saturate(1.4);
@@ -1246,6 +1246,7 @@ body.reader-page .reader-header {
   border: 1px solid var(--mist);
   border-radius: 999px;
   box-shadow: var(--shadow-card);
+  overflow: hidden; /* clips button hover-fills to the pill's rounded ends */
   transition: box-shadow 0.15s ease, border-color 0.15s ease;
 }
 .zoom-controls:hover {
@@ -1256,35 +1257,35 @@ body.reader-page .reader-header {
 .zoom-controls .icon-btn {
   width: 40px;
   height: 40px;
+  flex: none;
   border: none;
-  border-radius: 50%;
+  border-radius: 0; /* square fill — the container's overflow does the rounding */
   background: transparent;
   color: var(--ink);
   font-size: 17px;
   font-weight: 500;
   line-height: 1;
-  transition: background 0.12s ease, color 0.12s ease, transform 0.08s ease;
+  transition: background 0.12s ease, color 0.12s ease;
 }
 .zoom-controls .icon-btn:hover { background: var(--paper-dim); }
-.zoom-controls .icon-btn:active { transform: scale(0.92); }
+.zoom-controls .icon-btn:active { background: var(--mist); }
 .zoom-controls .icon-btn:disabled {
   opacity: 0.3;
   pointer-events: none;
 }
 
 .zoom-level {
+  min-width: 46px;
+  height: 40px;
+  padding: 0 4px;
+  border: none;
+  border-left: 1px solid var(--mist);
+  border-right: 1px solid var(--mist);
+  background: none;
   font-family: var(--font-ui);
   font-size: 12px;
   font-weight: 560;
   font-variant-numeric: tabular-nums;
-  min-width: 46px;
-  height: 40px;
-  padding: 0 4px;
-  border-left: 1px solid var(--mist);
-  border-right: 1px solid var(--mist);
-  background: none;
-  border-top: none;
-  border-bottom: none;
   color: var(--graphite);
   cursor: pointer;
   transition: background 0.12s ease, color 0.12s ease;
@@ -1292,13 +1293,4 @@ body.reader-page .reader-header {
 .zoom-level:hover {
   background: var(--paper-dim);
   color: var(--ink);
-}
-
-/* zoomed-out canvas treatment stays as-is */
-.reading-pane.zoomed-out {
-  background: #e7e9ec;
-}
-.reading-pane.zoomed-out #viewer {
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
-  border-radius: 6px;
 }

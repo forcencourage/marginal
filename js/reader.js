@@ -1246,24 +1246,86 @@ function renderSearchStatus() {
   searchPrev.disabled = searchNext.disabled = total === 0;
 }
 
+// ---------------------------------------------------------------------------
+// Zoom (PDF-style zoom-out: grows the box epub.js paginates against, then
+// visually shrinks it back with a transform — so zooming out reveals more
+// text/images per page instead of just shrinking the same page.)
+// ---------------------------------------------------------------------------
+
 const ZOOM_MIN = 0.4;
 const ZOOM_MAX = 1;
 const ZOOM_STEP = 0.1;
+const VIEWER_MAX_WIDTH = 960; // must match #viewer's max-width in style.css
 let zoomLevel = 1;
+let zoomResizeTimer = null;
 
 const readingPane = document.querySelector('.reading-pane');
 const zoomOutBtn = document.getElementById('zoom-out');
 const zoomInBtn = document.getElementById('zoom-in');
 const zoomLevelBtn = document.getElementById('zoom-level');
 
+// The pane's own box. #viewer becomes position:absolute when zoomed, so it's
+// taken out of flow and never influences the pane's own size — safe to
+// measure at any zoom level.
+function baseViewerSize() {
+  return {
+    width: Math.min(readingPane.clientWidth, VIEWER_MAX_WIDTH),
+    height: readingPane.clientHeight,
+  };
+}
+
 function applyZoom() {
   const viewerEl = document.getElementById('viewer');
-  viewerEl.style.transform = zoomLevel === 1 ? '' : `scale(${zoomLevel})`;
+  const { width: baseWidth, height: baseHeight } = baseViewerSize();
+
   readingPane.classList.toggle('zoomed-out', zoomLevel < 0.999);
   zoomLevelBtn.textContent = `${Math.round(zoomLevel * 100)}%`;
   zoomOutBtn.disabled = zoomLevel <= ZOOM_MIN + 1e-9;
   zoomInBtn.disabled = zoomLevel >= ZOOM_MAX - 1e-9;
   try { localStorage.setItem('marginal:zoom', String(zoomLevel)); } catch {}
+
+  if (zoomLevel === 1) {
+    viewerEl.style.position = '';
+    viewerEl.style.left = '';
+    viewerEl.style.top = '';
+    viewerEl.style.width = '';
+    viewerEl.style.height = '';
+    viewerEl.style.maxWidth = '';
+    viewerEl.style.transform = '';
+    resizeRenditionTo(baseWidth, baseHeight);
+    return;
+  }
+
+  // Grow the layout box by 1/zoom (more content fits), then scale it back
+  // down so it still fits the pane's footprint.
+  const contentWidth = Math.round(baseWidth / zoomLevel);
+  const contentHeight = Math.round(baseHeight / zoomLevel);
+
+  viewerEl.style.position = 'absolute';
+  viewerEl.style.left = '50%';
+  viewerEl.style.top = '50%';
+  viewerEl.style.maxWidth = 'none';
+  viewerEl.style.width = `${contentWidth}px`;
+  viewerEl.style.height = `${contentHeight}px`;
+  viewerEl.style.transform = `translate(-50%, -50%) scale(${zoomLevel})`;
+
+  resizeRenditionTo(contentWidth, contentHeight);
+}
+
+function resizeRenditionTo(width, height) {
+  if (!rendition) return;
+  clearTimeout(zoomResizeTimer);
+  // epub.js re-lays-out the whole spine on resize — debounce so a burst of
+  // +/- clicks doesn't trigger a pile of redundant reflows.
+  zoomResizeTimer = setTimeout(async () => {
+    const cfi = latestCfi; // capture before resize, in case it jumps to spine start
+    try {
+      rendition.resize(width, height);
+      if (cfi) await rendition.display(cfi); // restore reading position, just in case
+    } catch (err) {
+      console.error('Could not resize the reader for zoom', err);
+    }
+  }, 120);
 }
 
 function setZoom(level) {
@@ -1284,6 +1346,14 @@ function bindZoomControls() {
     if (e.key === '-') { e.preventDefault(); zoomOut(); }
     else if (e.key === '=' || e.key === '+') { e.preventDefault(); zoomIn(); }
     else if (e.key === '0') { e.preventDefault(); resetZoom(); }
+  });
+
+  // Re-lay-out if the window/pane changes size while zoomed.
+  let winResizeTimer = null;
+  window.addEventListener('resize', () => {
+    if (zoomLevel === 1) return;
+    clearTimeout(winResizeTimer);
+    winResizeTimer = setTimeout(applyZoom, 150);
   });
 
   let saved = null;
