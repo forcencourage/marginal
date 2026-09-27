@@ -1300,10 +1300,6 @@ function applyZoom() {
 
   const contentWidth = Math.floor(baseWidth / zoomLevel);
   const contentHeight = Math.floor(baseHeight / zoomLevel);
-
-  // Same centering offset as before, but now expressed as a translate()
-  // *inside* the transform property — so it animates in lockstep with
-  // scale() as one continuous motion instead of snapping ahead of it.
   const dx = Math.round((baseWidth - contentWidth) / 2);
   const dy = Math.round((baseHeight - contentHeight) / 2);
 
@@ -1317,8 +1313,7 @@ function applyZoom() {
   viewerEl.style.transform = `translate(${dx}px, ${dy}px) scale(${zoomLevel})`;
 
   resizeRenditionTo(contentWidth, contentHeight);
-
-  requestAnimationFrame(() => { viewerEl.style.opacity = '1'; });
+  // no opacity line here — resizeRenditionTo owns the fade, start to finish
 }
 
 let zoomResizeToken = 0;
@@ -1335,23 +1330,18 @@ function resizeRenditionTo(width, height) {
     viewerEl.style.opacity = '0';
     await new Promise((resolve) => requestAnimationFrame(resolve));
 
-    // Wait for epub.js's own confirmation that it actually repainted —
-    // not just that our function calls returned.
-    const rendered = new Promise((resolve) => {
-      rendition.once('rendered', resolve);
-    });
+    const rendered = new Promise((resolve) => rendition.once('rendered', resolve));
 
     try {
-      rendition.resize(width, height);
-      if (cfi) rendition.display(cfi); // don't await this one — we're waiting on 'rendered' instead
+      await rendition.resize(width, height);
       await rendered;
+      if (myToken !== zoomResizeToken) return;
 
-      // extra safety margin: give the browser two more paint cycles to
-      // fully settle the iframe's internal column layout before revealing
+      if (cfi) await rendition.display(cfi);
+      if (myToken !== zoomResizeToken) return;
+
       await new Promise((resolve) => requestAnimationFrame(resolve));
       await new Promise((resolve) => requestAnimationFrame(resolve));
-
-      if (myToken !== zoomResizeToken) return; // a newer zoom superseded this one
     } catch (err) {
       console.error('Could not resize the reader for zoom', err);
     } finally {
