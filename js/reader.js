@@ -300,6 +300,7 @@ function bindHeaderControls() {
   bindReaderNavigation();
   bindSearchControls();
   bindReactionControls();
+  bindZoomControls();
 
   // The debounced save (see scheduleProgressSave) can miss the very last
   // position if the reader navigates away before it fires. Flush
