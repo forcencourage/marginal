@@ -1316,6 +1316,8 @@ function applyZoom() {
   viewerEl.style.transform = `translate(${dx}px, ${dy}px) scale(${zoomLevel})`;
 
   resizeRenditionTo(contentWidth, contentHeight);
+
+  requestAnimationFrame(() => { viewerEl.style.opacity = '1'; });
 }
 
 function resizeRenditionTo(width, height) {
