@@ -1285,6 +1285,10 @@ function applyZoom() {
   try { localStorage.setItem('marginal:zoom', String(zoomLevel)); } catch {}
 
   if (zoomLevel === 1) {
+    viewerEl.style.position = '';
+    viewerEl.style.left = '';
+    viewerEl.style.top = '';
+    viewerEl.style.margin = '';
     viewerEl.style.width = '';
     viewerEl.style.height = '';
     viewerEl.style.maxWidth = '';
@@ -1293,15 +1297,26 @@ function applyZoom() {
     return;
   }
 
-  // floor, not round — a box very slightly SMALLER than the visual footprint
-  // is safe; slightly bigger is what causes the bottom line to get clipped
+  // floor, not round — a box very slightly SMALLER than the footprint is
+  // safe; slightly bigger is what clips the last line
   const contentWidth = Math.floor(baseWidth / zoomLevel);
   const contentHeight = Math.floor(baseHeight / zoomLevel);
 
+  // Pure pixel math: position the box's top-left so its *unscaled* center
+  // lands exactly on the pane's center. Scaling around that same center
+  // (transform-origin: center center) then can't drift — no percentages,
+  // no ancestor-size feedback loop.
+  const left = Math.round((baseWidth - contentWidth) / 2);
+  const top = Math.round((baseHeight - contentHeight) / 2);
+
+  viewerEl.style.position = 'absolute'; // out of flow — can't inflate ancestors anymore
   viewerEl.style.maxWidth = 'none';
+  viewerEl.style.margin = '0';
+  viewerEl.style.left = `${left}px`;
+  viewerEl.style.top = `${top}px`;
   viewerEl.style.width = `${contentWidth}px`;
   viewerEl.style.height = `${contentHeight}px`;
-  viewerEl.style.transform = `scale(${zoomLevel})`;   // no translate needed — flex centers it
+  viewerEl.style.transform = `scale(${zoomLevel})`;
 
   resizeRenditionTo(contentWidth, contentHeight);
 }
