@@ -403,6 +403,7 @@ async function openBook() {
   });
 
   rendition.on('rendered', () => {
+    console.log('rendered fired', Date.now());
     loadingEl.classList.add('hidden');
   });
 
@@ -1327,30 +1328,35 @@ function resizeRenditionTo(width, height) {
   clearTimeout(zoomResizeTimer);
 
   const viewerEl = document.getElementById('viewer');
-  const myToken = ++zoomResizeToken; // invalidates any earlier in-flight call
+  const myToken = ++zoomResizeToken;
 
   zoomResizeTimer = setTimeout(async () => {
     const cfi = latestCfi;
     viewerEl.style.opacity = '0';
     await new Promise((resolve) => requestAnimationFrame(resolve));
 
-    // wait for epub.js's OWN confirmation that layout settled, not just
-    // that our resize() call returned
-    const settled = new Promise((resolve) => {
-      rendition.once('resized', resolve);
+    // Wait for epub.js's own confirmation that it actually repainted —
+    // not just that our function calls returned.
+    const rendered = new Promise((resolve) => {
+      rendition.once('rendered', resolve);
     });
 
     try {
       rendition.resize(width, height);
-      await settled;
+      if (cfi) rendition.display(cfi); // don't await this one — we're waiting on 'rendered' instead
+      await rendered;
+
+      // extra safety margin: give the browser two more paint cycles to
+      // fully settle the iframe's internal column layout before revealing
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
       if (myToken !== zoomResizeToken) return; // a newer zoom superseded this one
-      if (cfi) await rendition.display(cfi);
-      if (myToken !== zoomResizeToken) return;
     } catch (err) {
       console.error('Could not resize the reader for zoom', err);
     } finally {
       if (myToken === zoomResizeToken) {
-        requestAnimationFrame(() => { viewerEl.style.opacity = '1'; });
+        viewerEl.style.opacity = '1';
       }
     }
   }, 120);
