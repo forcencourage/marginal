@@ -1320,26 +1320,38 @@ function applyZoom() {
   requestAnimationFrame(() => { viewerEl.style.opacity = '1'; });
 }
 
+let zoomResizeToken = 0;
+
 function resizeRenditionTo(width, height) {
   if (!rendition) return;
   clearTimeout(zoomResizeTimer);
 
   const viewerEl = document.getElementById('viewer');
+  const myToken = ++zoomResizeToken; // invalidates any earlier in-flight call
 
   zoomResizeTimer = setTimeout(async () => {
     const cfi = latestCfi;
-    viewerEl.style.opacity = '0'; // hide before the reflow starts
-
-    // let the fade-out actually paint before we trigger the reflow
+    viewerEl.style.opacity = '0';
     await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    // wait for epub.js's OWN confirmation that layout settled, not just
+    // that our resize() call returned
+    const settled = new Promise((resolve) => {
+      rendition.once('resized', resolve);
+    });
 
     try {
       rendition.resize(width, height);
+      await settled;
+      if (myToken !== zoomResizeToken) return; // a newer zoom superseded this one
       if (cfi) await rendition.display(cfi);
+      if (myToken !== zoomResizeToken) return;
     } catch (err) {
       console.error('Could not resize the reader for zoom', err);
     } finally {
-      requestAnimationFrame(() => { viewerEl.style.opacity = '1'; });
+      if (myToken === zoomResizeToken) {
+        requestAnimationFrame(() => { viewerEl.style.opacity = '1'; });
+      }
     }
   }, 120);
 }
