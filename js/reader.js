@@ -1285,9 +1285,6 @@ function applyZoom() {
   try { localStorage.setItem('marginal:zoom', String(zoomLevel)); } catch {}
 
   if (zoomLevel === 1) {
-    viewerEl.style.position = '';
-    viewerEl.style.left = '';
-    viewerEl.style.top = '';
     viewerEl.style.width = '';
     viewerEl.style.height = '';
     viewerEl.style.maxWidth = '';
@@ -1296,18 +1293,15 @@ function applyZoom() {
     return;
   }
 
-  // Grow the layout box by 1/zoom (more content fits), then scale it back
-  // down so it still fits the pane's footprint.
-  const contentWidth = Math.round(baseWidth / zoomLevel);
-  const contentHeight = Math.round(baseHeight / zoomLevel);
+  // floor, not round — a box very slightly SMALLER than the visual footprint
+  // is safe; slightly bigger is what causes the bottom line to get clipped
+  const contentWidth = Math.floor(baseWidth / zoomLevel);
+  const contentHeight = Math.floor(baseHeight / zoomLevel);
 
-  viewerEl.style.position = 'absolute';
-  viewerEl.style.left = '50%';
-  viewerEl.style.top = '50%';
   viewerEl.style.maxWidth = 'none';
   viewerEl.style.width = `${contentWidth}px`;
   viewerEl.style.height = `${contentHeight}px`;
-  viewerEl.style.transform = `translate(-50%, -50%) scale(${zoomLevel})`;
+  viewerEl.style.transform = `scale(${zoomLevel})`;   // no translate needed — flex centers it
 
   resizeRenditionTo(contentWidth, contentHeight);
 }
@@ -1337,9 +1331,10 @@ const zoomIn = () => setZoom(zoomLevel + ZOOM_STEP);
 const resetZoom = () => setZoom(1);
 
 function bindZoomControls() {
-  zoomOutBtn.addEventListener('click', zoomOut);
-  zoomInBtn.addEventListener('click', zoomIn);
-  zoomLevelBtn.addEventListener('click', resetZoom);
+
+  zoomOutBtn.addEventListener('click', () => { zoomOut(); zoomOutBtn.blur(); });
+  zoomInBtn.addEventListener('click', () => { zoomIn(); zoomInBtn.blur(); });
+  zoomLevelBtn.addEventListener('click', () => { resetZoom(); zoomLevelBtn.blur(); });
 
   document.addEventListener('keydown', (e) => {
     if (!(e.ctrlKey || e.metaKey)) return;
