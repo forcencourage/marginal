@@ -1323,15 +1323,23 @@ function applyZoom() {
 function resizeRenditionTo(width, height) {
   if (!rendition) return;
   clearTimeout(zoomResizeTimer);
-  // epub.js re-lays-out the whole spine on resize — debounce so a burst of
-  // +/- clicks doesn't trigger a pile of redundant reflows.
+
+  const viewerEl = document.getElementById('viewer');
+
   zoomResizeTimer = setTimeout(async () => {
-    const cfi = latestCfi; // capture before resize, in case it jumps to spine start
+    const cfi = latestCfi;
+    viewerEl.style.opacity = '0'; // hide before the reflow starts
+
+    // let the fade-out actually paint before we trigger the reflow
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
     try {
       rendition.resize(width, height);
-      if (cfi) await rendition.display(cfi); // restore reading position, just in case
+      if (cfi) await rendition.display(cfi);
     } catch (err) {
       console.error('Could not resize the reader for zoom', err);
+    } finally {
+      requestAnimationFrame(() => { viewerEl.style.opacity = '1'; });
     }
   }, 120);
 }
