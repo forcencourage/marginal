@@ -1275,9 +1275,22 @@ function baseViewerSize() {
   };
 }
 
+// Base padding of #viewer at 100% zoom, in px. CSS % padding resolves
+// against the pane's width, so compute it the same way.
+function basePadding() {
+  const paneW = readingPane.clientWidth;
+  const searchBarH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--search-bar-h')) || 56;
+  return {
+    x: Math.round(paneW * 0.09),
+    top: Math.round(Math.max(paneW * 0.06, searchBarH + 8)),
+    bottom: Math.round(paneW * 0.06),
+  };
+}
+
 function applyZoom() {
   const viewerEl = document.getElementById('viewer');
   const { width: baseWidth, height: baseHeight } = baseViewerSize();
+  const pad = basePadding();
 
   readingPane.classList.toggle('zoomed-out', zoomLevel < 0.999);
   zoomLevelBtn.textContent = `${Math.round(zoomLevel * 100)}%`;
@@ -1286,35 +1299,37 @@ function applyZoom() {
   try { localStorage.setItem('marginal:zoom', String(zoomLevel)); } catch {}
 
   if (zoomLevel === 1) {
-    viewerEl.style.position = '';
-    viewerEl.style.left = '';
-    viewerEl.style.top = '';
-    viewerEl.style.margin = '';
-    viewerEl.style.width = '';
-    viewerEl.style.height = '';
-    viewerEl.style.maxWidth = '';
-    viewerEl.style.transform = '';
-    resizeRenditionTo(baseWidth, baseHeight);
+    ['position', 'left', 'top', 'margin', 'width', 'height', 'maxWidth', 'transform', 'padding']
+      .forEach((p) => { viewerEl.style[p] = ''; });
+    // give epub.js the CONTENT box, not the outer box
+    resizeRenditionTo(baseWidth - 2 * pad.x, baseHeight - pad.top - pad.bottom);
     return;
   }
 
-  const contentWidth = Math.floor(baseWidth / zoomLevel);
-  const contentHeight = Math.floor(baseHeight / zoomLevel);
-  const dx = Math.round((baseWidth - contentWidth) / 2);
-  const dy = Math.round((baseHeight - contentHeight) / 2);
+  const outerW = Math.floor(baseWidth / zoomLevel);
+  const outerH = Math.floor(baseHeight / zoomLevel);
+
+  // padding grows by 1/zoom so it looks the same size after scale()
+  const padX = Math.round(pad.x / zoomLevel);
+  const padT = Math.round(pad.top / zoomLevel);
+  const padB = Math.round(pad.bottom / zoomLevel);
+
+  const dx = Math.round((baseWidth - outerW) / 2);
+  const dy = Math.round((baseHeight - outerH) / 2);
 
   viewerEl.style.position = 'absolute';
   viewerEl.style.maxWidth = 'none';
   viewerEl.style.margin = '0';
   viewerEl.style.left = '0';
   viewerEl.style.top = '0';
-  viewerEl.style.width = `${contentWidth}px`;
-  viewerEl.style.height = `${contentHeight}px`;
+  viewerEl.style.width = `${outerW}px`;
+  viewerEl.style.height = `${outerH}px`;
+  viewerEl.style.padding = `${padT}px ${padX}px ${padB}px`;
   viewerEl.style.transform = `translate(${dx}px, ${dy}px) scale(${zoomLevel})`;
 
-  resizeRenditionTo(contentWidth, contentHeight);
-  // no opacity line here — resizeRenditionTo owns the fade, start to finish
+  resizeRenditionTo(outerW - 2 * padX, outerH - padT - padB);
 }
+
 
 let zoomResizeToken = 0;
 
