@@ -403,7 +403,6 @@ async function openBook() {
   });
 
   rendition.on('rendered', () => {
-    console.log('rendered fired', Date.now());
     loadingEl.classList.add('hidden');
   });
 
@@ -1337,13 +1336,10 @@ function resizeRenditionTo(width, height) {
   if (!rendition) return;
   clearTimeout(zoomResizeTimer);
 
-  const viewerEl = document.getElementById('viewer');
   const myToken = ++zoomResizeToken;
 
   zoomResizeTimer = setTimeout(async () => {
     const cfi = latestCfi;
-    viewerEl.style.opacity = '0';
-    await new Promise((resolve) => requestAnimationFrame(resolve));
 
     const rendered = new Promise((resolve) => rendition.once('rendered', resolve));
 
@@ -1353,16 +1349,8 @@ function resizeRenditionTo(width, height) {
       if (myToken !== zoomResizeToken) return;
 
       if (cfi) await rendition.display(cfi);
-      if (myToken !== zoomResizeToken) return;
-
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-      await new Promise((resolve) => requestAnimationFrame(resolve));
     } catch (err) {
       console.error('Could not resize the reader for zoom', err);
-    } finally {
-      if (myToken === zoomResizeToken) {
-        viewerEl.style.opacity = '1';
-      }
     }
   }, 120);
 }
