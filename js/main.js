@@ -1,11 +1,8 @@
 import {
-  fetchBooks,
-  insertBook,
-  deleteBook,
-  uploadEpubFile,
-  uploadCoverBlob,
-  publicCoverUrl,
+  fetchBooks, insertBook, deleteBook, uploadEpubFile, uploadCoverBlob,
+  publicCoverUrl, bookFormat,
 } from './supabaseClient.js';
+
 import { requireAuth, signOut } from './auth.js';
 
 const grid = document.getElementById('grid');
@@ -85,6 +82,7 @@ function renderTile(book) {
       ${coverUrl
         ? `<img src="${coverUrl}" alt="" loading="lazy" />`
         : `<div class="cover-fallback">${BOOK_SVG}</div>`}
+      <span class="format-badge">${bookFormat(book) === 'pdf' ? 'PDF' : 'EPUB'}</span>
       ${progress > 0 ? `<div class="progress-rail"><span style="width:${progress}%"></span></div>` : ''}
     </div>
     <button class="book-delete" type="button" aria-label="Delete ${escapeHtml(book.title)}">${TRASH_SVG}</button>
@@ -133,37 +131,23 @@ function resetImportUi() {
 }
 
 async function handleFile(file) {
-  if (!file.name.toLowerCase().endsWith('.epub')) {
-    alert('Please choose an .epub file.');
+  const lower = file.name.toLowerCase();
+  const isPdf = lower.endsWith('.pdf');
+  if (!isPdf && !lower.endsWith('.epub')) {
+    alert('Please choose an .epub or .pdf file.');
     return;
   }
 
   dropzone.style.display = 'none';
   importStatus.classList.add('active');
   importCancel.disabled = true;
-  setStatus('Reading EPUB metadata…');
+  setStatus(isPdf ? 'Reading PDF…' : 'Reading EPUB metadata…');
 
   try {
     const arrayBuffer = await file.arrayBuffer();
-
-    // Parse with epub.js purely to pull title / author / cover — the file
-    // itself is uploaded as-is right after.
-    const book = ePub(arrayBuffer.slice(0));
-    await book.ready;
-    const metadata = await book.loaded.metadata;
-    const title = (metadata.title || file.name.replace(/\.epub$/i, '')).trim();
-    const author = (metadata.creator || 'Unknown author').trim();
-
-    let coverBlob = null;
-    try {
-      const coverUrl = await book.coverUrl();
-      if (coverUrl) {
-        const res = await fetch(coverUrl);
-        coverBlob = await res.blob();
-      }
-    } catch {
-      coverBlob = null;
-    }
+    const { title, author, coverBlob } = isPdf
+      ? await readPdfInfo(arrayBuffer, file)
+      : await readEpubInfo(arrayBuffer, file);
 
     setStatus('Uploading to your library…');
     const tempId = crypto.randomUUID();
@@ -179,6 +163,49 @@ async function handleFile(file) {
     console.error(err);
     setStatus('Something went wrong — check the console for details.');
     importCancel.disabled = false;
+  }
+}
+
+async function readEpubInfo(arrayBuffer, file) {
+  const book = ePub(arrayBuffer.slice(0));
+  await book.ready;
+  const metadata = await book.loaded.metadata;
+  const title = (metadata.title || file.name.replace(/\.epub$/i, '')).trim();
+  const author = (metadata.creator || 'Unknown author').trim();
+
+  let coverBlob = null;
+  try {
+    const coverUrl = await book.coverUrl();
+    if (coverUrl) coverBlob = await (await fetch(coverUrl)).blob();
+  } catch { coverBlob = null; }
+  return { title, author, coverBlob };
+}
+
+async function readPdfInfo(arrayBuffer, file) {
+  const pdfjs = window.pdfjsLib;
+  pdfjs.GlobalWorkerOptions.workerSrc =
+    'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(arrayBuffer.slice(0)) }).promise;
+  try {
+    const meta = await doc.getMetadata().catch(() => ({ info: {} }));
+    const title = (meta.info?.Title || file.name.replace(/\.pdf$/i, '')).trim();
+    const author = (meta.info?.Author || 'Unknown author').trim();
+
+    // Cover = first page rendered to a JPEG thumbnail.
+    let coverBlob = null;
+    try {
+      const page = await doc.getPage(1);
+      const base = page.getViewport({ scale: 1 });
+      const viewport = page.getViewport({ scale: 520 / base.width });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.floor(viewport.width);
+      canvas.height = Math.floor(viewport.height);
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+      coverBlob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.85));
+    } catch { coverBlob = null; }
+    return { title, author, coverBlob };
+  } finally {
+    doc.destroy();
   }
 }
 

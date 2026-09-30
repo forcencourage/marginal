@@ -1,15 +1,9 @@
 import {
-  fetchBook,
-  deleteBook,
-  publicEpubUrl,
-  fetchHighlights,
-  insertHighlight,
-  deleteHighlight,
-  updateBookProgress,
-  flushBookProgress,
-  fetchReactionsForBook,
-  upsertReaction,
+  fetchBook, deleteBook, publicEpubUrl, fetchHighlights, insertHighlight,
+  deleteHighlight, updateBookProgress, flushBookProgress,
+  fetchReactionsForBook, upsertReaction, bookFormat,
 } from './supabaseClient.js';
+import { createPdfEngine } from './pdfEngine.js';
 import { requireAuth } from './auth.js';
 
 const HIGHLIGHT_FILL = '#a9dcf5';
@@ -92,6 +86,10 @@ let currentReactionHighlight = null;
 let activeReactionTab = 'like';
 let selectedEmojiFile = null;
 let quill = null;
+let isPdf = false;
+let pdfEngine = null;
+const pageIndicator = document.getElementById('page-indicator');
+let indicatorTimer = null;
 
 // Rename the files here to match whatever you put in reactions/emojis/
 const EMOJI_OPTIONS = [
@@ -237,13 +235,15 @@ async function init() {
   }
 
   titleEl.textContent = bookRow.title;
+  isPdf = bookFormat(bookRow) === 'pdf';
+  document.body.classList.add(isPdf ? 'is-pdf' : 'is-epub');
   authorEl.textContent = bookRow.author || 'Unknown author';
   document.title = `${bookRow.title} — Marginal`;
 
   bindHeaderControls();
 
   const [, rows, reactionRows] = await Promise.all([
-    openBook(),
+    isPdf ? openPdf() : openBook(),
     fetchHighlights(bookId).catch((err) => { console.error(err); return []; }),
     fetchReactionsForBook(bookId).catch((err) => { console.error(err); return []; }),
   ]);
@@ -353,7 +353,7 @@ async function goNext() {
   if (isNavigating) return;
   isNavigating = true;
   try {
-    await rendition.next();
+    await (isPdf ? pdfEngine.next() : rendition.next());
   } catch (err) {
     console.error(err);
   } finally {
@@ -365,7 +365,7 @@ async function goPrev() {
   if (isNavigating) return;
   isNavigating = true;
   try {
-    await rendition.prev();
+    await (isPdf ? pdfEngine.prev() : rendition.prev());
   } catch (err) {
     console.error(err);
   } finally {
@@ -455,11 +455,12 @@ function scheduleProgressSave(location) {
   if (locationsReady && book.locations.length()) {
     percent = Math.round(book.locations.percentageFromCfi(cfi) * 100);
   }
-  // progressPill.textContent = percent > 0 ? `${percent}% read` : 'Just started';
+  showPageIndicator(percent > 0 ? `${percent}%` : 'Just started');
+  queueProgressSave(cfi, percent);
+}
 
-  // Track the latest position outside the debounce so it's always available
-  // for an immediate flush (see flushProgress) if the reader navigates away
-  // before the debounced save below gets a chance to fire.
+// Shared by EPUB and PDF: remember latest position + debounced save.
+function queueProgressSave(cfi, percent) {
   latestCfi = cfi;
   latestPercent = percent;
 
@@ -473,6 +474,46 @@ function scheduleProgressSave(location) {
       console.error('Could not save reading progress', err);
     }
   }, 800);
+}
+
+function showPageIndicator(text) {
+  pageIndicator.textContent = text;
+  pageIndicator.classList.add('show');
+  clearTimeout(indicatorTimer);
+  indicatorTimer = setTimeout(() => pageIndicator.classList.remove('show'), 1800);
+}
+
+// ---------------------------------------------------------------------------
+// PDF rendering
+// ---------------------------------------------------------------------------
+
+async function openPdf() {
+  const res = await fetch(publicEpubUrl(bookRow.file_path));
+  if (!res.ok) throw new Error(`Could not download PDF (${res.status})`);
+  const data = new Uint8Array(await res.arrayBuffer());
+
+  pdfEngine = await createPdfEngine({
+    container: readingPane,
+    data,
+    initialZoom: zoomLevel,
+    onLocation: ({ cfi, page, numPages, percent }) => {
+      updateActiveTocLink(`pdf:${page}`);
+      showPageIndicator(`Page ${page} of ${numPages}`);
+      queueProgressSave(cfi, percent);
+    },
+    onSelection: ({ loc, text }) => {
+      pendingSelection = { cfiRange: loc, contents: { window }, text };
+      showConfirmBar(text);
+    },
+    onHighlightClick: handleHighlightClick,
+  });
+
+  loadingEl.classList.add('hidden');
+  if (bookRow.location_cfi) pdfEngine.display(bookRow.location_cfi);
+
+  pdfEngine.getToc()
+    .then(renderToc)
+    .catch(() => { tocEmpty.textContent = 'Contents unavailable for this book.'; });
 }
 
 // ---------------------------------------------------------------------------
@@ -522,7 +563,7 @@ async function confirmPendingHighlight() {
     openReactionModal(row);
   } catch (err) {
     console.error('Could not save highlight', err);
-    rendition.annotations.remove(cfiRange, 'highlight');
+    unpaintHighlight(cfiRange);
     alert('Could not save the highlight. See console for details.');
   }
 }
@@ -541,6 +582,8 @@ function clearSelection(contents) {
 
 function paintHighlight(cfiRange, row) {
   userHighlightCfis.add(cfiRange);
+  if (isPdf) { pdfEngine.addHighlight(cfiRange, row || null); return; }
+
   rendition.annotations.remove(cfiRange, 'highlight'); // replaces a search hit on the exact same text, if any
   rendition.annotations.add(
     'highlight',
@@ -554,7 +597,8 @@ function paintHighlight(cfiRange, row) {
 
 function unpaintHighlight(cfiRange) {
   userHighlightCfis.delete(cfiRange);
-  rendition.annotations.remove(cfiRange, 'highlight');
+  if (isPdf) pdfEngine.removeHighlight(cfiRange);
+  else rendition.annotations.remove(cfiRange, 'highlight');
 }
 
 function showToast(message = 'Highlight saved') {
@@ -611,7 +655,7 @@ function addHighlightCard(row) {
     card.style.opacity = '0.5';
     try {
       await deleteHighlight(row.id);
-      rendition.annotations.remove(row.cfi_range, 'highlight');
+      unpaintHighlight(row.cfi_range);
       reactionsByHighlight.delete(row.id);
       card.remove();
       updateHighlightCount();
@@ -629,10 +673,13 @@ function addHighlightCard(row) {
 async function goToHighlight(cfiRange, card) {
   closePanel();
   try {
-    const cfiObj = new ePub.CFI(cfiRange);
-    cfiObj.collapse(true);
-    const startCfi = cfiObj.toString();
-    await rendition.display(startCfi);
+    if (isPdf) {
+      await pdfEngine.revealHighlight(cfiRange);
+    } else {
+      const cfiObj = new ePub.CFI(cfiRange);
+      cfiObj.collapse(true);
+      await rendition.display(cfiObj.toString());
+    }
   } catch (err) {
     console.error(err);
     return;
@@ -690,6 +737,7 @@ function bindReaderNavigation() {
 
 // Best-effort brighten-then-restore pulse on the highlighted text itself.
 function flashInBook(cfiRange) {
+  if (isPdf) { pdfEngine.flash(cfiRange); return; }
   try {
     for (const contents of rendition.getContents()) {
       const el = contents.document.querySelector(`[data-epubjs-cfi="${cssEscape(cfiRange)}"]`);
@@ -931,8 +979,10 @@ function buildTocLevel(items, isSub) {
     link.textContent = item.label.trim();
     link.dataset.href = item.href;
     link.addEventListener('click', async () => {
+      if (!item.href) return;
       try {
-        await rendition.display(item.href);
+        if (isPdf) pdfEngine.display(item.href);
+        else await rendition.display(item.href);
       } catch (err) {
         console.error(err);
         return;
@@ -1039,7 +1089,7 @@ function closeSearch() {
 // --- Running a search ------------------------------------------------------
 
 async function runSearch(query, { jump = false } = {}) {
-  if (!book || !rendition) return;
+  if (isPdf ? !pdfEngine : (!book || !rendition)) return;
 
   const runId = ++search.runId;
   clearSearchResults();
@@ -1053,28 +1103,35 @@ async function runSearch(query, { jump = false } = {}) {
 
   search.busy = true;
   renderSearchStatus();
-  await book.ready;
+  if (!isPdf) await book.ready;
 
-  for (const item of book.spine.spineItems) {
+  const sections = isPdf
+    ? Array.from({ length: pdfEngine.numPages }, (_, i) => i + 1)
+    : book.spine.spineItems;
+
+  for (const item of sections) {
     if (runId !== search.runId) return;
 
-    let cfis = [];
+    let hits = [];
     try {
-      cfis = await searchSection(item, regex, SEARCH_MAX_MATCHES - search.matches.length);
+      const room = SEARCH_MAX_MATCHES - search.matches.length;
+      hits = isPdf
+        ? await pdfEngine.searchPage(item, regex, room, foldChar)
+        : (await searchSection(item, regex, room)).map((cfi) => ({ cfi }));
     } catch (err) {
-      console.warn('Search skipped a section', item.href, err);
+      console.warn('Search skipped a section', err);
     }
-    if (runId !== search.runId) return; // a newer search took over while we waited
+    if (runId !== search.runId) return;
 
-    for (const cfi of cfis) {
-      const match = { cfi, painted: false };
+    for (const hit of hits) {
+      const match = { ...hit, painted: false };
       paintMatch(match, false);
       search.matches.push(match);
     }
-    renderSearchStatus(); // the count grows live as sections are scanned
+    renderSearchStatus();
 
     if (search.matches.length >= SEARCH_MAX_MATCHES) { search.capped = true; break; }
-    await new Promise((resolve) => setTimeout(resolve)); // let the UI breathe
+    await new Promise((resolve) => setTimeout(resolve));
   }
 
   search.busy = false;
@@ -1154,7 +1211,10 @@ async function searchSection(item, regex, room) {
 // --- Highlighting & navigation --------------------------------------------
 
 function paintMatch(match, active) {
-  if (userHighlightCfis.has(match.cfi)) return; // already covered by a saved highlight
+
+  if (isPdf) { pdfEngine.paintSearch(match, active); match.painted = true; return; }
+  if (userHighlightCfis.has(match.cfi)) return;
+
   if (match.painted) rendition.annotations.remove(match.cfi, 'highlight');
   rendition.annotations.add(
     'highlight',
@@ -1168,9 +1228,13 @@ function paintMatch(match, active) {
 }
 
 function clearSearchResults() {
-  for (const match of search.matches) {
-    if (match.painted && !userHighlightCfis.has(match.cfi)) {
-      rendition.annotations.remove(match.cfi, 'highlight');
+  if (isPdf) {
+    pdfEngine?.clearSearch();
+  } else {
+    for (const match of search.matches) {
+      if (match.painted && !userHighlightCfis.has(match.cfi)) {
+        rendition.annotations.remove(match.cfi, 'highlight');
+      }
     }
   }
   search.matches = [];
@@ -1181,6 +1245,11 @@ function clearSearchResults() {
 // Index of the first hit at or after the given reading position.
 function firstMatchFrom(cfi) {
   if (!cfi) return 0;
+  if (isPdf) {
+    const page = Number(/^pdf:(\d+)/.exec(cfi)?.[1]) || 1;
+    const i = search.matches.findIndex((m) => m.page >= page);
+    return i === -1 ? 0 : i;
+  }
   const cfiTool = new ePub.CFI();
   const idx = search.matches.findIndex((m) => cfiTool.compare(m.cfi, cfi) >= 0);
   return idx === -1 ? 0 : idx;
@@ -1211,9 +1280,13 @@ async function activateMatch(index) {
   renderSearchStatus();
 
   try {
-    const target = new ePub.CFI(match.cfi);
-    target.collapse(true);
-    await rendition.display(target.toString());
+    if (isPdf) {
+      await pdfEngine.revealMatch(match);
+    } else {
+      const target = new ePub.CFI(match.cfi);
+      target.collapse(true);
+      await rendition.display(target.toString());
+    }
   } catch (err) {
     console.error(err);
   }

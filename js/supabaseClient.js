@@ -2,6 +2,10 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 export const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+export function bookFormat(book) {
+  return /\.pdf$/i.test(book?.file_path || '') ? 'pdf' : 'epub';
+}
+
 const EPUB_BUCKET = 'epub-files';
 const COVER_BUCKET = 'book-covers';
 
@@ -90,8 +94,9 @@ export async function deleteBook(book) {
 
 export async function uploadEpubFile(id, file) {
   const path = `${id}/${sanitizeFilename(file.name)}`;
+  const isPdf = /\.pdf$/i.test(file.name);
   const { error } = await supabase.storage.from(EPUB_BUCKET).upload(path, file, {
-    contentType: 'application/epub+zip',
+    contentType: isPdf ? 'application/pdf' : 'application/epub+zip',
     upsert: true,
   });
   if (error) throw error;
