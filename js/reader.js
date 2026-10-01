@@ -89,6 +89,7 @@ let quill = null;
 let isPdf = false;
 let pdfEngine = null;
 const pageIndicator = document.getElementById('page-indicator');
+const readingPane = document.querySelector('.reading-pane');
 let indicatorTimer = null;
 
 // Rename the files here to match whatever you put in reactions/emojis/
@@ -243,10 +244,15 @@ async function init() {
   bindHeaderControls();
 
   const [, rows, reactionRows] = await Promise.all([
-    isPdf ? openPdf() : openBook(),
+    (isPdf ? openPdf() : openBook()).catch((err) => {
+      console.error('Could not open book', err);
+      loadingEl.classList.add('hidden');
+      titleEl.textContent = 'Could not open this book';
+    }),
     fetchHighlights(bookId).catch((err) => { console.error(err); return []; }),
     fetchReactionsForBook(bookId).catch((err) => { console.error(err); return []; }),
   ]);
+
   reactionsByHighlight = new Map(reactionRows.map((r) => [r.highlight_id, r]));
   renderHighlightList(rows);
 
@@ -495,7 +501,6 @@ async function openPdf() {
   pdfEngine = await createPdfEngine({
     container: readingPane,
     data,
-    initialZoom: zoomLevel,
     onLocation: ({ cfi, page, numPages, percent }) => {
       updateActiveTocLink(`pdf:${page}`);
       showPageIndicator(`Page ${page} of ${numPages}`);
