@@ -191,3 +191,67 @@ export async function upsertReaction({ highlightId, type, emoji = null, comment 
   if (error) throw error;
   return data;
 }
+
+// ---------------------------------------------------------------------------
+// Profile
+// ---------------------------------------------------------------------------
+
+const PROFILE_BUCKET = 'profile-media';
+
+export async function fetchProfile(userId) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data; // null if the user never saved a profile
+}
+
+export async function saveProfile(userId, { displayName, bio, avatarPath, coverPath }) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .upsert({
+      id: userId,
+      display_name: displayName,
+      bio,
+      avatar_path: avatarPath,
+      cover_path: coverPath,
+      updated_at: new Date().toISOString(),
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// Unique filename per upload => no stale CDN/browser cache after changing a picture.
+export async function uploadProfileImage(userId, kind, blob) {
+  const path = `${userId}/${kind}-${Date.now()}.jpg`;
+  const { error } = await supabase.storage.from(PROFILE_BUCKET).upload(path, blob, {
+    contentType: 'image/jpeg',
+    cacheControl: '31536000',
+  });
+  if (error) throw error;
+  return path;
+}
+
+export async function removeProfileImage(path) {
+  if (!path) return;
+  await supabase.storage.from(PROFILE_BUCKET).remove([path]); // best effort
+}
+
+export function publicProfileMediaUrl(path) {
+  if (!path) return null;
+  return supabase.storage.from(PROFILE_BUCKET).getPublicUrl(path).data.publicUrl;
+}
+
+export async function fetchPublicHighlights(userId, { limit = 8, offset = 0 } = {}) {
+  const { data, error } = await supabase.rpc('get_public_highlights', {
+    p_user: userId,
+    p_limit: limit,
+    p_offset: offset,
+  });
+  if (error) throw error;
+  return data || [];
+}

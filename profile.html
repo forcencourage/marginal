@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Marginal — Profile</title>
+<meta name="description" content="Highlights and reactions collected on Marginal." />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,450;9..144,500;9..144,600&family=Inter:wght@400;500;560;650&family=League+Spartan:wght@700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="css/style.css" />
+<link rel="stylesheet" href="css/profile.css" />
+<link rel="icon" href="favicon.svg" type="image/svg+xml" />
+<link rel="alternate icon" href="favicon.ico" />
+</head>
+<body class="profile-page">
+
+<header class="pf-header">
+  <a class="pf-brand" href="index.html">Marginal</a>
+  <nav class="pf-nav" id="pf-nav" aria-label="Account"></nav>
+</header>
+
+<main class="pf-main">
+  <section class="pf-hero">
+    <div class="pf-cover" id="pf-cover"></div>
+
+    <div class="pf-identity">
+      <div class="pf-avatar" id="pf-avatar" aria-hidden="true"></div>
+
+      <div class="pf-actions" id="pf-actions"></div>
+
+      <h1 class="pf-name" id="pf-name">&nbsp;</h1>
+      <p class="pf-bio" id="pf-bio"></p>
+    </div>
+  </section>
+
+  <section class="pf-feed" aria-label="Highlights">
+    <div class="pf-feed-head">
+      <h2>Highlights</h2>
+    </div>
+
+    <div class="pf-list" id="pf-list"></div>
+
+    <div class="pf-state" id="pf-loading">
+      <span class="spinner"></span><span>Loading highlights…</span>
+    </div>
+    <p class="pf-state pf-empty" id="pf-empty" hidden>No highlights yet.</p>
+    <p class="pf-state pf-error" id="pf-error" hidden>Couldn't load highlights. Please try again.</p>
+
+    <div class="pf-more">
+      <button class="btn" id="load-more" type="button" hidden>Load more</button>
+    </div>
+  </section>
+</main>
+
+<!-- Edit profile -->
+<div class="overlay" id="edit-overlay">
+  <div class="overlay-card edit-card" role="dialog" aria-modal="true" aria-labelledby="edit-title">
+    <h3 id="edit-title">Edit profile</h3>
+
+    <div class="edit-media">
+      <div class="edit-cover" id="edit-cover-preview"></div>
+      <div class="edit-avatar" id="edit-avatar-preview"></div>
+      <div class="edit-media-buttons">
+        <button class="btn btn-ghost btn-sm" id="pick-cover" type="button">Change cover</button>
+        <button class="btn btn-ghost btn-sm" id="pick-avatar" type="button">Change photo</button>
+      </div>
+      <input type="file" id="cover-input" accept="image/*" class="visually-hidden" />
+      <input type="file" id="avatar-input" accept="image/*" class="visually-hidden" />
+    </div>
+
+    <label class="edit-field">
+      <span>Name</span>
+      <input type="text" id="edit-name" maxlength="60" placeholder="Your name" autocomplete="name" />
+    </label>
+
+    <label class="edit-field">
+      <span>Bio <em id="bio-count">0/280</em></span>
+      <textarea id="edit-bio" maxlength="280" rows="4" placeholder="A few words about you and what you read"></textarea>
+    </label>
+
+    <p class="edit-error" id="edit-error" hidden></p>
+
+    <div class="overlay-actions">
+      <button class="btn btn-ghost" id="edit-cancel" type="button">Cancel</button>
+      <button class="btn" id="edit-save" type="button">Save</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+<script type="module" src="js/profile.js"></script>
+</body>
+</html>
