@@ -1324,3 +1324,26 @@ body.reader-page .reader-header {
   .header-actions { gap: 6px; }
   .header-actions .btn { height: 38px; padding: 0 12px; font-size: 13px; }
 }
+
+.book-offline {
+  position: absolute;
+  right: 8px;
+  bottom: 14px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  color: #131315;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  z-index: 2;
+}
+.book-offline svg { width: 16px; height: 16px; }
+.book-offline.saved { background: #7cc6ec; }
+.book-offline.busy { opacity: 0.6; animation: offline-pulse 0.9s ease-in-out infinite; }
+@keyframes offline-pulse { 50% { transform: scale(0.88); } }
+.book-tile.unavailable { opacity: 0.45; }

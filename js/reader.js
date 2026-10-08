@@ -1,10 +1,13 @@
 import {
-  fetchBook, deleteBook, publicEpubUrl, fetchHighlights, insertHighlight,
+  fetchBook, deleteBook, getBookBuffer, fetchHighlights, insertHighlight,
   deleteHighlight, updateBookProgress, flushBookProgress,
   fetchReactionsForBook, upsertReaction, bookFormat,
 } from './supabaseClient.js';
+import { registerSW } from './offline.js';
 import { createPdfEngine } from './pdfEngine.js';
 import { requireAuth } from './auth.js';
+
+registerSW();
 
 const HIGHLIGHT_FILL = '#a9dcf5';
 const HIGHLIGHT_FILL_STRONG = '#7cc6ec';
@@ -265,6 +268,11 @@ async function init() {
       goToHighlight(row.cfi_range, card);
     }
   }
+
+  if (navigator.onLine) {
+    setTimeout(() => EMOJI_OPTIONS.forEach(({ file }) =>
+      fetch(`reactions/emojis/${file}`).catch(() => {})), 3000);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -384,9 +392,7 @@ async function goPrev() {
 // ---------------------------------------------------------------------------
 
 async function openBook() {
-  const url = publicEpubUrl(bookRow.file_path);
-  const res = await fetch(url);
-  const arrayBuffer = await res.arrayBuffer();
+  const arrayBuffer = await getBookBuffer(bookRow);
 
   book = ePub(arrayBuffer);
 
@@ -494,9 +500,8 @@ function showPageIndicator(text) {
 // ---------------------------------------------------------------------------
 
 async function openPdf() {
-  const res = await fetch(publicEpubUrl(bookRow.file_path));
-  if (!res.ok) throw new Error(`Could not download PDF (${res.status})`);
-  const data = new Uint8Array(await res.arrayBuffer());
+  const data = new Uint8Array(await getBookBuffer(bookRow));
+
 
   pdfEngine = await createPdfEngine({
     container: readingPane,
