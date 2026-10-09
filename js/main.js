@@ -1,7 +1,7 @@
 import {
   fetchBooks, insertBook, deleteBook, uploadEpubFile, uploadCoverBlob,
   publicCoverUrl, bookFormat,
-  localBookIds, localCoverUrl, saveBookOffline, removeBookOffline,
+  localBookIds, localCoverUrl, saveBookOffline, removeBookOffline, isOnline
 } from './supabaseClient.js';
 import { registerSW } from './offline.js';
 import { requireAuth, signOut } from './auth.js';
@@ -36,8 +36,7 @@ async function init() {
 
   document.getElementById('logout-btn').addEventListener('click', signOut);
 
-  window.addEventListener('online', renderGrid);
-  window.addEventListener('offline', renderGrid);
+  window.addEventListener('marginal:connectivity', renderGrid);
 
   importTrigger.addEventListener('click', openOverlay);
   importCancel.addEventListener('click', closeOverlay);
@@ -105,7 +104,7 @@ function renderTile(book, { isLocal = false, localCover = null } = {}) {
 
   const coverUrl = localCover || publicCoverUrl(book.cover_path);
   const progress = Math.max(0, Math.min(100, book.progress_percent || 0));
-  const unavailable = !navigator.onLine && !isLocal;
+  const unavailable = !isOnline() && !isLocal;
   tile.classList.toggle('unavailable', unavailable);
 
   tile.innerHTML = `
@@ -133,7 +132,7 @@ function renderTile(book, { isLocal = false, localCover = null } = {}) {
   });
 
   tile.addEventListener('click', () => {
-    if (!navigator.onLine && !tile.querySelector('.book-offline.saved')) {
+    if (!isOnline() && !tile.querySelector('.book-offline.saved')) {
       alert('This book is not saved on this device. Reconnect, or save it for offline reading first.');
       return;
     }
@@ -154,7 +153,7 @@ function renderTile(book, { isLocal = false, localCover = null } = {}) {
       setOfflineState(offBtn, !wasSaved);
     } catch (err) {
       console.error(err);
-      alert(navigator.onLine
+      alert(isOnline()
         ? 'Could not save the book for offline reading.'
         : 'You need to be online to save a book for offline reading.');
     } finally {
@@ -174,7 +173,7 @@ function renderTile(book, { isLocal = false, localCover = null } = {}) {
       await renderGrid();
     } catch (err) {
       console.error(err);
-      alert(navigator.onLine
+      alert(isOnline()
         ? 'Could not delete the book. See console for details.'
         : 'Deleting a book requires an internet connection.');
       deleteBtn.disabled = false;
@@ -185,7 +184,7 @@ function renderTile(book, { isLocal = false, localCover = null } = {}) {
 }
 
 function openOverlay() {
-  if (!navigator.onLine) { alert('Importing a book requires an internet connection.'); return; }
+  if (!isOnline()) { alert('Importing a book requires an internet connection.'); return; }
   overlay.classList.add('open');
   resetImportUi();
 }

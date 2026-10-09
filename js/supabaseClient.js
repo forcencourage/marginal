@@ -9,12 +9,52 @@ export function bookFormat(book) {
 
 const EPUB_BUCKET = 'epub-files';
 const COVER_BUCKET = 'book-covers';
-const timeout = () => AbortSignal.timeout(8000);
 
 // Re-export so pages only import from one place.
 export const { localBookIds } = local;
 export const localCoverUrl = local.getCoverBlobUrl;
 export const removeBookOffline = local.removeLocalBook;
+
+const timeout = () => AbortSignal.timeout(5000);
+
+// ---------------------------------------------------------------------------
+// Connectivity: navigator.onLine lies on "Wi-Fi without internet", so we also
+// probe the Supabase host. A DNS failure rejects immediately.
+// ---------------------------------------------------------------------------
+
+let reachable = navigator.onLine;
+let probeTimer = null;
+
+export const isOnline = () => navigator.onLine && reachable;
+
+export async function probe() {
+  if (!navigator.onLine) return setReachable(false);
+  try {
+    await fetch(`${SUPABASE_URL}/auth/v1/health`, {
+      mode: 'no-cors', cache: 'no-store', signal: AbortSignal.timeout(3000),
+    });
+    setReachable(true);
+  } catch {
+    setReachable(false);
+  }
+}
+
+function setReachable(value) {
+  const changed = value !== reachable;
+  reachable = value;
+  clearTimeout(probeTimer);
+  if (!value) probeTimer = setTimeout(probe, 5000); // keep checking until it's back
+  if (changed) {
+    window.dispatchEvent(new Event('marginal:connectivity'));
+    if (value) syncQueue();                          // back online: upload queued changes
+  }
+}
+
+export const connectivityReady = probe();             // first check, awaited by the fetchers
+const online = async () => { await connectivityReady; return isOnline(); };
+
+window.addEventListener('online', probe);
+window.addEventListener('offline', () => setReachable(false));
 
 async function currentUserId() {
   try {
@@ -41,7 +81,7 @@ export function syncQueue() {
 }
 
 async function doSync() {
-  if (!navigator.onLine) return;
+  if (!(await online())) return;
   try {
     const { data: { session } } = await supabase.auth.getSession(); // refreshes expired token
     if (!session) return;
@@ -104,7 +144,7 @@ const withPendingProgress = (book) => {
 
 export async function fetchBooks() {
   await Promise.race([syncQueue(), new Promise((r) => setTimeout(r, 4000))]);
-  if (navigator.onLine) {
+  if (await online()) {
     try {
       const { data, error } = await supabase
         .from('books').select('*')
@@ -113,7 +153,7 @@ export async function fetchBooks() {
       if (error) throw error;
       await local.replaceAll('books', data);
       return data.map(withPendingProgress);
-    } catch (err) { console.warn('Using cached library', err); }
+    } catch (err) { console.warn('Using cached library', err);  probe();}
   }
   const rows = await local.idb.getAll('books');
   rows.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
@@ -121,7 +161,7 @@ export async function fetchBooks() {
 }
 
 export async function fetchBook(id) {
-  if (navigator.onLine) {
+  if (await online()) {
     try {
       const { data, error } = await supabase
         .from('books').select('*').eq('id', id).single()
@@ -129,7 +169,7 @@ export async function fetchBook(id) {
       if (error) throw error;
       await local.idb.put('books', data);
       return withPendingProgress(data);
-    } catch (err) { console.warn('Using cached book row', err); }
+    } catch (err) { console.warn('Using cached book row', err);  probe();}
   }
   const cached = await local.idb.get('books', id);
   if (!cached) throw new Error('Book not available offline');
@@ -152,19 +192,20 @@ export async function updateBookProgress(id, { locationCfi, progressPercent }) {
   if (cached) {
     await local.idb.put('books', { ...cached, location_cfi: locationCfi, progress_percent: progressPercent });
   }
-  if (!navigator.onLine) return;
+  if (!isOnline()) return;
   const { error } = await supabase
     .from('books')
     .update({ location_cfi: locationCfi, progress_percent: progressPercent })
     .eq('id', id);
   if (!error) local.clearPendingProgress(id, locationCfi);
+  else probe();
   // on error it simply stays pending and is retried by syncQueue()
 }
 
 export function flushBookProgress(id, { locationCfi, progressPercent }) {
   if (!locationCfi) return;
   local.setPendingProgress(id, { locationCfi, progressPercent }); // synchronous, always survives
-  if (!navigator.onLine) return;
+  if (!isOnline()) return;
   try {
     fetch(`${SUPABASE_URL}/rest/v1/books?id=eq.${id}`, {
       method: 'PATCH',
@@ -181,7 +222,7 @@ export function flushBookProgress(id, { locationCfi, progressPercent }) {
 }
 
 export async function deleteBook(book) {
-  if (!navigator.onLine) throw new Error('Deleting a book requires an internet connection');
+  if (!(await online())) throw new Error('Deleting a book requires an internet connection');
 
   await supabase.storage.from(EPUB_BUCKET).remove([book.file_path]);
   if (book.cover_path) {
@@ -274,7 +315,7 @@ export async function fetchHighlights(bookId) {
   const pending = (await local.getQueue()).length;
 
   // Only trust the server when nothing local is waiting to be uploaded.
-  if (navigator.onLine && !pending) {
+  if ((await online()) && !pending) {
     try {
       const { data, error } = await supabase
         .from('highlights').select('*').eq('book_id', bookId)
@@ -283,7 +324,7 @@ export async function fetchHighlights(bookId) {
       if (error) throw error;
       await local.replaceByIndex('highlights', 'book_id', bookId, data);
       return data;
-    } catch (err) { console.warn('Using cached highlights', err); }
+    } catch (err) { console.warn('Using cached highlights', err);  probe();}
   }
   const rows = await local.idb.getAllByIndex('highlights', 'book_id', bookId);
   return rows.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
@@ -331,7 +372,7 @@ export async function countHighlights(bookId) {
 
 export async function fetchReactionsForBook(bookId) {
   const pending = (await local.getQueue()).length;
-  if (navigator.onLine && !pending) {
+  if ((await online()) && !pending) {
     try {
       const { data, error } = await supabase
         .from('highlight_reactions')
@@ -342,7 +383,7 @@ export async function fetchReactionsForBook(bookId) {
       const rows = data.map(({ highlights, ...r }) => ({ ...r, book_id: highlights.book_id }));
       await local.replaceByIndex('reactions', 'book_id', bookId, rows);
       return rows;
-    } catch (err) { console.warn('Using cached reactions', err); }
+    } catch (err) { console.warn('Using cached reactions', err);  probe();}
   }
   return local.idb.getAllByIndex('reactions', 'book_id', bookId);
 }

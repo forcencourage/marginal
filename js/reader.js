@@ -1,7 +1,7 @@
 import {
   fetchBook, deleteBook, getBookBuffer, fetchHighlights, insertHighlight,
   deleteHighlight, updateBookProgress, flushBookProgress,
-  fetchReactionsForBook, upsertReaction, bookFormat,
+  fetchReactionsForBook, upsertReaction, bookFormat, isOnline
 } from './supabaseClient.js';
 import { registerSW } from './offline.js';
 import { createPdfEngine } from './pdfEngine.js';
@@ -269,7 +269,7 @@ async function init() {
     }
   }
 
-  if (navigator.onLine) {
+  if (isOnline()) {
     setTimeout(() => EMOJI_OPTIONS.forEach(({ file }) =>
       fetch(`reactions/emojis/${file}`).catch(() => {})), 3000);
   }
