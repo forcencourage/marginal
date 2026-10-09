@@ -27,11 +27,14 @@ let probeTimer = null;
 
 export const isOnline = () => navigator.onLine && reachable;
 
+
 export async function probe() {
   if (!navigator.onLine) return setReachable(false);
   try {
     await fetch(`${SUPABASE_URL}/auth/v1/health`, {
-      mode: 'no-cors', cache: 'no-store', signal: AbortSignal.timeout(3000),
+      cache: 'no-store',
+      headers: { apikey: SUPABASE_ANON_KEY },
+      signal: AbortSignal.timeout(3000),
     });
     setReachable(true);
   } catch {
